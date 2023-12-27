@@ -1,0 +1,54 @@
+
+name: Build and Deploy to CDNs
+on:
+  release:
+    types: [released]
+env:
+  BUCKET_NAME : "cdn.annoto.net"
+  AWS_REGION : "eu-central-1"
+  CLOUDFRONT_DIST_ID: "E2PYBK8LLNZMVK"
+  REPO_NAME: ${{ github.event.repository.name }}
+  APP_VERSION: ${{ github.ref_name }}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Setup Node
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    - name: Install Packages
+      run: npm ci
+    - name: Build
+      run: npm run build
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v3
+      with:
+        aws-region: ${{ env.AWS_REGION }}
+        role-to-assume: arn:aws:iam::281726344480:role/nn-cdn-deploy-${{ env.REPO_NAME }}
+        role-session-name: deploy-${{ env.REPO_NAME }}-${{ env.APP_VERSION }}-${{ github.actor }}
+    - name: Sync to S3 ${{ github.ref_name }}
+      run: |
+        aws s3 sync ./dist \
+        "s3://${{ env.BUCKET_NAME }}/${{ env.REPO_NAME }}/${{ env.APP_VERSION }}/" \
+        --cache-control "public,no-transform,max-age=86400" \
+        --delete \
+        --acl public-read
+    - name: Sync to S3 latest
+      run: |
+        aws s3 sync ./dist \
+        "s3://${{ env.BUCKET_NAME }}/${{ env.REPO_NAME }}/latest/" \
+        --cache-control "no-cache,no-transform,max-age=86400" \
+        --delete \
+        --acl public-read
+    - name: Invalidate Cloudfront
+      run: |
+        aws cloudfront create-invalidation \
+        --distribution-id ${{ env.CLOUDFRONT_DIST_ID }} \
+        --paths "/${{ env.REPO_NAME }}/latest/*" "/${{ env.REPO_NAME }}/${{ env.APP_VERSION }}/*"

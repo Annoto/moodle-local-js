@@ -1,0 +1,11 @@
+{
+    "release-type": "node",
+    "draft": false,
+    "prerelease": false,
+    "skip-github-release": false,
+    "include-v-in-tag": false,
+    "include-component-in-tag": false,
+    "packages": {
+        ".": {}
+    }
+}

@@ -1,0 +1,18 @@
+on:
+  push:
+    branches:
+      - main
+name: release-please
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: google-github-actions/release-please-action@v3
+        with:
+          command: manifest
+          default-branch: main
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          monorepo-tags: false

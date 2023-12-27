@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "outDir": "./dist/",
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "experimentalDecorators": true,
+    "skipLibCheck": true,
+    "target": "ES5",
+    "module": "commonjs",
+    "allowJs": false,
+    "sourceMap": true,
+    "strict": true,
+    "moduleResolution": "Node",
+    "baseUrl": "./src",
+    "preserveSymlinks": true,
+    "lib": ["es2017", "dom"],
+    "pretty": true
+  },
+  "include": ["src/**/*.ts"]
+}
