@@ -9,6 +9,8 @@ module.exports = function (env) {
         output: {
             filename: 'annoto.js',
             path: path.resolve(__dirname, 'dist/'),
+            library: 'AnnotoMoodle',
+            libraryTarget: 'umd',
             sourceMapFilename: 'annoto.map',
             clean: true,
             publicPath: '',

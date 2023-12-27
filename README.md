@@ -8,6 +8,14 @@ The code is written in [Typescript].
 ## Getting Started
 
 
+The script is served from Anntoo CDN at: https://cdn.annoto.net/moodle-local-js/latest/annoto.js
+
+Specific versions are available as well, for example: https://cdn.annoto.net/moodle-local-js/1.0.0/annoto.js
+
+Staging is available at: https://cdn.annoto.net/staging/moodle-local-js/latest/annoto.js
+
+The library is exported as UMD under name of `AnnotoMoodle`
+
 ### Installing
 
 Clone and run npm to install dependencies:
