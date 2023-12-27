@@ -1,6 +1,6 @@
 {
   "name": "@annoto/moodle-local-js",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Annoto Moodle local plugin Javascript",
   "license": "Apache-2.0",
   "author": "Genadi Sokolov [genadi@annoto.net]",
