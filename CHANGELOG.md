@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/Annoto/moodle-local-js/compare/1.0.0...1.0.1) (2024-01-01)
+
+
+### Bug Fixes
+
+* widget positioning on scroll for moodle v4.0 - v.4.2 ([9def84e](https://github.com/Annoto/moodle-local-js/commit/9def84e1aa7f381eb5f6608147cc2351a35f9ac6))
+
 ## [1.0.0](https://github.com/Annoto/moodle-local-js/compare/v0.3.3...1.0.0) (2023-12-27)
 
 
