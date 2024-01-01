@@ -15,8 +15,10 @@ import {
     IMoodle,
     IMoodleAnnoto,
     IMoodleJsParams,
+    IMoodleRelease,
     KalturaKdpMapType,
 } from './interfaces';
+import { debounce, parseMoodleVersion } from './util';
 
 export { IMoodleJsParams } from './interfaces';
 
@@ -110,6 +112,14 @@ class AnnotoMoodle {
         return config;
     }
 
+    get moodleRelease(): IMoodleRelease {
+        return parseMoodleVersion(this.params?.moodleRelease);
+    }
+
+    get pageEl(): HTMLElement | null {
+        return document.getElementById('page');
+    }
+
     kalturaInit(): void {
         const maKApp = moodleAnnoto.kApp;
         moodleAnnoto.setupKalturaKdpMap = this.setupKalturaKdpMap.bind(this);
@@ -187,9 +197,9 @@ class AnnotoMoodle {
         }
         // Check if we have multiple players
         this.findMultiplePlayers();
-        const annotoPlayer = this.findPlayer();
+        const playerEl = this.findPlayer();
 
-        if (annotoPlayer) {
+        if (playerEl) {
             const innerPageWrapper = document.getElementById('page-wrapper');
             if (innerPageWrapper) {
                 const annotoWrapper = document.createElement('div');
@@ -239,6 +249,21 @@ class AnnotoMoodle {
             }
         } else {
             log.warn('AnnotoMoodle: bootstrap didn`t load');
+        }
+        const { major, minor } = this.moodleRelease;
+        if (major === 4 && minor < 3) {
+            const { pageEl } = this;
+            if (pageEl) {
+                log.info('AnnotoMoodle: apply page scroll fix');
+                pageEl.style.overflow = 'visible';
+                // moodle has a js that sets overflow to auto on resize for smaller screens
+                $(window).on(
+                    'resize',
+                    debounce(() => {
+                        pageEl.style.overflow = 'visible';
+                    }, 500)
+                );
+            }
         }
     }
 

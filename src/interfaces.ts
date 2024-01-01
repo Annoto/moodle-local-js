@@ -12,6 +12,8 @@ export interface IMoodleJsParams {
     mediaGroupTitle: string;
     mediaGroupDescription?: string;
     deploymentDomain: string;
+    moodleVersion: string;
+    moodleRelease: string;
 }
 
 export interface IMoodleAnnoto {
@@ -42,4 +44,19 @@ export interface IMoodle {
     format_grid?: unknown;
     format_topcoll?: unknown;
     snapTheme?: unknown;
+}
+
+export interface IMoodleRelease {
+    /**
+     * @default 0
+     */
+    major: number;
+    /**
+     * @default 0
+     */
+    minor: number;
+    /**
+     * @default 0
+     */
+    patch: number;
 }
