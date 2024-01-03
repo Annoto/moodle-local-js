@@ -21,6 +21,10 @@ export interface IMoodleAnnoto {
     log: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     notification: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     VimeoPlayer: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    videojs?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    /**
+     * @deprecated
+     */
     videoJsPlayer: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     kApp: {
         kdpMap: KalturaKdpMapType;
@@ -60,3 +64,5 @@ export interface IMoodleRelease {
      */
     patch: number;
 }
+
+export type MoodlePageFormatType = 'plain' | 'tabs' | 'grid' | 'topcoll' | 'snap' | 'modtab' | 'tiles' | 'icontent' | 'modtabDivs';

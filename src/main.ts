@@ -17,6 +17,7 @@ import {
     IMoodleJsParams,
     IMoodleRelease,
     KalturaKdpMapType,
+    MoodlePageFormatType,
 } from './interfaces';
 import { debounce, parseMoodleVersion } from './util';
 
@@ -53,6 +54,8 @@ class AnnotoMoodle {
     playerType?: PlayerType;
     playerId?: string;
     playerElement?: HTMLElement;
+    videojsResolvePromise?: Promise<unknown>;
+    moodleFormat: MoodlePageFormatType = 'plain';
 
     setup(params: IMoodleJsParams): void {
         if (this.isSetup) {
@@ -63,11 +66,11 @@ class AnnotoMoodle {
         this.isSetup = true;
         this.params = params;
 
+        this.detectFormat();
         this.tilesInit();
         this.icontentInit();
         this.kalturaInit();
         this.wistiaIframeEmbedInit();
-        this.videotimeVimeoInit();
         $(document).ready(this.bootstrap.bind(this));
     }
 
@@ -118,6 +121,59 @@ class AnnotoMoodle {
 
     get pageEl(): HTMLElement | null {
         return document.getElementById('page');
+    }
+
+    get formatSelectors(): Record<MoodlePageFormatType, string> {
+        const doNotMatchSelector = 'body.do-not-match-any-selector';
+        return {
+            plain: doNotMatchSelector,
+            grid: 'body.format-grid .grid_section, body.format-grid #gridshadebox',
+            topcoll: 'body.format-topcoll .ctopics.topics .toggledsection ',
+            tabs: 'body.format-tabtopics .yui3-tab-panel',
+            snap: 'body.format-topics.theme-snap .topics .section.main',
+            modtab: '#page-mod-tab-view .TabbedPanelsContentGroup .TabbedPanelsContent',
+            modtabDivs: '#page-mod-tab-view #TabbedPanelsTabContent > div',
+            tiles: 'body.format-tiles #multi_section_tiles li.section.main.moveablesection',
+            icontent: doNotMatchSelector,
+        };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    get videojs(): Promise<any> {
+        if (moodleAnnoto.videojs) {
+            return Promise.resolve(moodleAnnoto.videojs);
+        }
+        if (!this.videojsResolvePromise) {
+            this.videojsResolvePromise = new Promise((resolve) => {
+                moodleAnnoto.require(['media_videojs/video-lazy'], resolve);
+            });
+        }
+        return this.videojsResolvePromise;
+    }
+
+    detectFormat(): void {
+        if (typeof M.tabtopics !== 'undefined') {
+            this.moodleFormat = 'tabs';
+        } else if (typeof M.format_grid !== 'undefined') {
+            this.moodleFormat = 'grid';
+        } else if (typeof M.format_topcoll !== 'undefined') {
+            this.moodleFormat = 'topcoll';
+        } else if (typeof M.snapTheme !== 'undefined') {
+            this.moodleFormat = 'snap';
+        } else if (document.body.id === 'page-mod-tab-view') {
+            if (document.querySelector('#page-mod-tab-view #TabbedPanelsTabContent > div')) {
+                this.moodleFormat = 'modtabDivs';
+            } else {
+                this.moodleFormat = 'modtab';
+            }
+        } else if (document.body.classList.contains('format-tiles')) {
+            this.moodleFormat = 'tiles';
+        } else if (document.body.classList.contains('path-mod-icontent')) {
+            this.moodleFormat = 'icontent';
+        } else {
+            this.moodleFormat = 'plain';
+        }
+        log.info(`AnnotoMoodle: detected activity format: ${this.moodleFormat}`);
     }
 
     kalturaInit(): void {
@@ -177,15 +233,17 @@ class AnnotoMoodle {
             playerElement = html5;
             this.playerType = 'html5';
         } else {
-            log.info('AnnotoMoodle: no player was founded');
+            log.info('AnnotoMoodle: player not detected');
             return undefined;
         }
 
         if (!playerElement.id || playerElement.id === '') {
             playerElement.id = `annoto_player_id_${Math.random().toString(36).substr(2, 6)}`;
         }
-        this.playerId = `#${playerElement.id}`;
+        this.playerId = playerElement.id;
         this.playerElement = playerElement;
+
+        log.info(`AnnotoMoodle: detected ${this.playerType}: ${this.playerId}`);
 
         return playerElement;
     }
@@ -195,8 +253,6 @@ class AnnotoMoodle {
         if (this.bootsrapDone) {
             return;
         }
-        // Check if we have multiple players
-        this.findMultiplePlayers();
         const playerEl = this.findPlayer();
 
         if (playerEl) {
@@ -210,7 +266,6 @@ class AnnotoMoodle {
 
             this.bootsrapDone = true;
             moodleAnnoto.require([this.params.bootstrapUrl], this.bootWidget.bind(this));
-            log.info(`AnnotoMoodle: bootstrap detected ${this.playerType} : ${this.playerId}`);
         }
     }
 
@@ -219,13 +274,14 @@ class AnnotoMoodle {
         const nonOverlayTimelinePlayers = ['youtube', 'vimeo'];
 
         config.widgets[0].player.type = playerType as PlayerType;
-        config.widgets[0].player.element = playerId as string;
+        config.widgets[0].player.element = `#${playerId}`;
         config.widgets[0].timeline = {
             overlay: nonOverlayTimelinePlayers.indexOf(playerType as string) === -1,
         };
     }
 
     bootWidget(): void {
+        log.info('AnnotoMoodle: boot widget');
         this.config = {
             ...this.configOverride,
             widgets: [{ player: {} as IPlayerConfig }],
@@ -236,9 +292,7 @@ class AnnotoMoodle {
         if (global.Annoto) {
             Annoto.on('ready', this.annotoReady.bind(this));
             if (this.playerType === 'videojs') {
-                // TODO: after fixed on moodle plugin side use moodleAnnoto.videoJsPlayer instead
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                moodleAnnoto.require(['media_videojs/video-lazy'], (vjs: any) => {
+                this.videojs.then((vjs) => {
                     this.config.widgets[0].player.params = {
                         videojs: vjs,
                     };
@@ -272,15 +326,19 @@ class AnnotoMoodle {
         // It can be used for SSO auth.
         this.annotoAPI = api;
         const jwt = this.params.userToken;
-        log.info('AnnotoMoodle: annoto ready');
+        log.info('AnnotoMoodle: widget ready');
         if (jwt && jwt !== '') {
             api.auth(jwt).catch(() => {
                 log.error('AnnotoMoodle: SSO auth error');
             });
-            this.checkWidgetVisibility();
         } else {
             log.info('AnnotoMoodle: SSO auth skipped');
         }
+
+        // TODO: shouldn't this be at setup?
+        this.checkWidgetVisibility();
+        // TODO: fix setup flow for multiple players
+        this.findMultiplePlayers();
     }
 
     kalturaPluginReadyHandle(api: IAnnotoApi): void {
@@ -355,39 +413,25 @@ class AnnotoMoodle {
     }
 
     checkWidgetVisibility(): void {
-        // TODO: check click reload subscription
-        // TODO: map of selectors for each course format
-        const formatSelectors = {
-            grid: 'body.format-grid .grid_section, body.format-grid #gridshadebox',
-            topcoll: 'body.format-topcoll .ctopics.topics .toggledsection ',
-            tabs: 'body.format-tabtopics .yui3-tab-panel',
-            snap: 'body.format-topics.theme-snap .topics .section.main',
-            modtab: '#page-mod-tab-view .TabbedPanelsContentGroup .TabbedPanelsContent',
-            // Another modtab format with different markup based on change of active div
-            modtabWithActiveDivs: '#page-mod-tab-view #TabbedPanelsTabContent > div',
-        };
-        let courseFormat = '';
-        let { playerElement } = this;
+        const { moodleFormat, formatSelectors } = this;
+        const supportedFormats: MoodlePageFormatType[] = [
+            'tabs',
+            'grid',
+            'topcoll',
+            'snap',
+            'modtab',
+            'modtabDivs',
+        ];
 
-        if (typeof M.tabtopics !== 'undefined') {
-            courseFormat = 'tabs';
-        } else if (typeof M.format_grid !== 'undefined') {
-            courseFormat = 'grid';
-        } else if (typeof M.format_topcoll !== 'undefined') {
-            courseFormat = 'topcoll';
-        } else if (typeof M.snapTheme !== 'undefined') {
-            courseFormat = 'snap';
-        } else if (document.body.id === 'page-mod-tab-view' && document.querySelector(formatSelectors.modtabWithActiveDivs)) {
-            courseFormat = 'modtabWithActiveDivs';
-        } else if (document.body.id === 'page-mod-tab-view') {
-            courseFormat = 'modtab';
+        if (!supportedFormats.includes(moodleFormat)) {
+            return;
         }
 
-        // TODO: debounce
+        // TODO: debounce ?
         const reloadAnnoto = (mutationList?: MutationRecord[]): void => {
             let mutationTarget: HTMLElement | null = null;
             if (mutationList) {
-                switch (courseFormat) {
+                switch (moodleFormat) {
                     case 'tabs':
                         mutationTarget = mutationList.filter((m) =>
                             (m.target as HTMLElement).classList.contains('yui3-tab-panel-selected')
@@ -413,14 +457,12 @@ class AnnotoMoodle {
                             )
                         )[0].target as HTMLElement;
                         break;
-                    case 'modtabWithActiveDivs':
+                    case 'modtabDivs':
                         mutationTarget = mutationList.filter((m) => {
                             if (m.type !== 'attributes') {
                                 return false;
                             }
-                            return (m.target as HTMLElement).classList.contains(
-                                'active'
-                            )
+                            return (m.target as HTMLElement).classList.contains('active');
                         })[0].target as HTMLElement;
                         break;
                     default:
@@ -428,18 +470,21 @@ class AnnotoMoodle {
                 }
             }
 
-            playerElement = this.findPlayer(mutationTarget);
-            if (playerElement) {
-                this.playerElement = playerElement;
-                this.prepareConfig();
+            if (mutationList && !mutationTarget) {
+                return;
             }
 
-            // FIXME: destroy not needed before load
-            this.annotoAPI?.destroy().then(() => {
-                if (playerElement?.offsetParent) {
-                    this.annotoAPI?.load(this.config);
-                }
-            });
+            log.info(`AnnotoMoodle: reload on ${moodleFormat} change`);
+
+            const playerElement = this.findPlayer(mutationTarget);
+            if (playerElement) {
+                this.prepareConfig();
+            }
+            if (playerElement?.offsetParent) {
+                this.annotoAPI?.load(this.config);
+            } else {
+                this.annotoAPI?.destroy();
+            }
         };
 
         const observerNodeTargets = document.querySelectorAll(
@@ -450,10 +495,12 @@ class AnnotoMoodle {
             const observer = new MutationObserver(reloadAnnoto);
 
             observerNodeTargets.forEach((target) => {
+                // TODO: map of attirbutes for each course format?
                 observer.observe(target, { attributes: true, childList: true, subtree: false });
             });
 
-            if (playerElement?.offsetParent === null) {
+            if (!this.playerElement?.offsetParent) {
+                // will make sure widget is properly loaded or destroyed for detached player element
                 reloadAnnoto();
             }
         }
@@ -509,32 +556,10 @@ class AnnotoMoodle {
         });
     }
 
-    videotimeVimeoInit(): void {
-        const isVimeoTime = document.getElementById('page-mod-videotime-view');
-        let setupRetry = 0;
-
-        const isReady = (): void => {
-            const vimeoPlayer = document.querySelector('iframe[src*="vimeo.com"]');
-            if (!vimeoPlayer && setupRetry < 50) {
-                setupRetry += 1;
-                setTimeout(isReady, 100);
-            } else {
-                this.bootstrap();
-            }
-        };
-
-        if (isVimeoTime) {
-            isReady();
-        }
-    }
-
     tilesInit(): void {
-        if (!document.body.classList.contains('format-tiles')) {
+        if (this.moodleFormat !== 'tiles') {
             return;
         }
-        const formatSelectors = {
-            tiles: 'body.format-tiles #multi_section_tiles li.section.main.moveablesection',
-        };
 
         const reloadAnnoto = (mutationList: MutationRecord[]): void => {
             let mutationTarget: MutationRecord[] = [];
@@ -555,11 +580,11 @@ class AnnotoMoodle {
                 }
                 return;
             }
+            log.info('AnnotoMoodle: reload on tiles change');
             setTimeout(() => {
                 const player = this.findPlayer(mutationTarget[0].target as HTMLElement);
 
                 if (player) {
-                    this.playerId = `#${player.id}`;
                     if (this.bootsrapDone) {
                         this.prepareConfig();
                         this.annotoAPI?.load(this.config).then(() => {
@@ -571,15 +596,12 @@ class AnnotoMoodle {
                             [this.params.bootstrapUrl],
                             this.bootWidget.bind(this)
                         );
-                        log.info(`AnnotoMoodle: detected ${this.playerType}:${this.playerId}`);
                     }
                 }
             }, 2000);
         };
 
-        const observerNodeTargets = document.querySelectorAll(
-            Object.values(formatSelectors).join(', ')
-        );
+        const observerNodeTargets = document.querySelectorAll(this.formatSelectors.tiles);
 
         if (observerNodeTargets.length > 0) {
             const observer = new MutationObserver(reloadAnnoto);
@@ -591,7 +613,7 @@ class AnnotoMoodle {
     }
 
     icontentInit(): void {
-        if (!document.body.classList.contains('path-mod-icontent')) {
+        if (this.moodleFormat !== 'icontent') {
             return;
         }
         const wrapper = document.getElementById('region-main');
@@ -604,11 +626,11 @@ class AnnotoMoodle {
                 });
             }
 
+            log.info('AnnotoMoodle: reload on icontent change');
             setTimeout(() => {
                 const player = this.findPlayer(idIcontentPages);
 
                 if (player) {
-                    this.playerId = `#${player.id}`;
                     if (this.bootsrapDone) {
                         this.prepareConfig();
                         this.annotoAPI?.load(this.config).then(() => {
@@ -620,7 +642,6 @@ class AnnotoMoodle {
                             [this.params.bootstrapUrl],
                             this.bootWidget.bind(this)
                         );
-                        log.info(`AnnotoMoodle: detected ${this.playerType}:${this.playerId}`);
                     }
                 }
             }, 2000);
@@ -634,9 +655,10 @@ class AnnotoMoodle {
         });
     }
 
-    // FIXME: rewrite
-    findMultiplePlayers(): void {
-        log.info('AnnotoMoodle: find Multiple Players');
+    async findMultiplePlayers(): Promise<void> {
+        if (this.moodleFormat !== 'plain') {
+            return;
+        }
         const vimeos = $('body').find('iframe[src*="vimeo.com"]').get();
         const videojs = $('body').find('.video-js').get();
         const allPlayers: {
@@ -646,8 +668,7 @@ class AnnotoMoodle {
             ...(vimeos.length > 1 && { vimeo: [...vimeos] }),
             ...(videojs.length > 1 && { videojs: [...videojs] }),
         };
-
-        let activePlayerId: string | null = null;
+        const vjs = await this.videojs;
 
         log.info('AnnotoMoodle: setup multiple players');
 
@@ -659,45 +680,40 @@ class AnnotoMoodle {
         };
 
         const reloadAnnotoWidget = (element: HTMLElement, playerType: PlayerType): void => {
-            this.playerId = `#${element.id}`;
+            this.playerId = element.id;
             this.playerElement = element;
             this.playerType = playerType;
             this.prepareConfig();
 
-            this.annotoAPI?.destroy().then(() => {
-                this.annotoAPI?.load(this.config);
-                log.info(`AnnotoMoodle: reload Player: ${element.id}`);
-            });
+            log.info(`AnnotoMoodle: reload widget for ${playerType}: ${element.id}`);
+            this.annotoAPI?.load(this.config);
         };
 
         for (const [playerType, players] of Object.entries(allPlayers)) {
-            // eslint-disable-next-line no-loop-func
             players.forEach((player) => {
                 validatePlayerId(player);
 
-                log.info(`AnnotoMoodle: setup Player: ${player.id}`);
+                log.info(`AnnotoMoodle: setup Player: ${playerType} ${player.id}`);
                 switch (playerType) {
                     case 'vimeo': {
                         const vimeoPlayer = new moodleAnnoto.VimeoPlayer(player);
                         vimeoPlayer.on('play', () => {
-                            if (player.id === activePlayerId) {
+                            if (player.id === this.playerId) {
                                 return;
                             }
-                            activePlayerId = player.id;
-                            log.info(`AnnotoMoodle: Player play: ${player.id}`);
+                            log.info(`AnnotoMoodle: Player play: ${playerType} ${player.id}`);
 
                             reloadAnnotoWidget(player, playerType);
                         });
                         break;
                     }
                     case 'videojs': {
-                        const playerJs = moodleAnnoto.videoJsPlayer(player);
+                        const playerJs = vjs(player.id);
                         playerJs.player().on('play', () => {
-                            if (player.id === activePlayerId) {
+                            if (player.id === this.playerId) {
                                 return;
                             }
-                            activePlayerId = player.id;
-                            log.info(`AnnotoMoodle: Player play: ${player.id}`);
+                            log.info(`AnnotoMoodle: Player play: ${playerType} ${player.id}`);
 
                             reloadAnnotoWidget(player, playerType);
                         });
