@@ -355,12 +355,16 @@ class AnnotoMoodle {
     }
 
     checkWidgetVisibility(): void {
+        // TODO: check click reload subscription
+        // TODO: map of selectors for each course format
         const formatSelectors = {
             grid: 'body.format-grid .grid_section, body.format-grid #gridshadebox',
             topcoll: 'body.format-topcoll .ctopics.topics .toggledsection ',
             tabs: 'body.format-tabtopics .yui3-tab-panel',
             snap: 'body.format-topics.theme-snap .topics .section.main',
             modtab: '#page-mod-tab-view .TabbedPanelsContentGroup .TabbedPanelsContent',
+            // Another modtab format with different markup based on change of active div
+            modtabWithActiveDivs: '#page-mod-tab-view #TabbedPanelsTabContent > div',
         };
         let courseFormat = '';
         let { playerElement } = this;
@@ -373,13 +377,15 @@ class AnnotoMoodle {
             courseFormat = 'topcoll';
         } else if (typeof M.snapTheme !== 'undefined') {
             courseFormat = 'snap';
+        } else if (document.body.id === 'page-mod-tab-view' && document.querySelector(formatSelectors.modtabWithActiveDivs)) {
+            courseFormat = 'modtabWithActiveDivs';
         } else if (document.body.id === 'page-mod-tab-view') {
             courseFormat = 'modtab';
         }
 
+        // TODO: debounce
         const reloadAnnoto = (mutationList?: MutationRecord[]): void => {
             let mutationTarget: HTMLElement | null = null;
-
             if (mutationList) {
                 switch (courseFormat) {
                     case 'tabs':
@@ -406,6 +412,16 @@ class AnnotoMoodle {
                                 'TabbedPanelsContentVisible'
                             )
                         )[0].target as HTMLElement;
+                        break;
+                    case 'modtabWithActiveDivs':
+                        mutationTarget = mutationList.filter((m) => {
+                            if (m.type !== 'attributes') {
+                                return false;
+                            }
+                            return (m.target as HTMLElement).classList.contains(
+                                'active'
+                            )
+                        })[0].target as HTMLElement;
                         break;
                     default:
                         break;
