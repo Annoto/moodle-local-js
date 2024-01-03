@@ -22,10 +22,6 @@ export interface IMoodleAnnoto {
     notification: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     VimeoPlayer: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     videojs?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-    /**
-     * @deprecated
-     */
-    videoJsPlayer: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     kApp: {
         kdpMap: KalturaKdpMapType;
     }; // eslint-disable-line @typescript-eslint/no-explicit-any
