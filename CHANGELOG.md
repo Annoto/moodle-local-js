@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/Annoto/moodle-local-js/compare/1.0.1...1.1.0) (2024-01-04)
+
+
+### Features
+
+* add support for mod tabs with nested divs ([9a771f9](https://github.com/Annoto/moodle-local-js/commit/9a771f95edc9205b0b35255fdae935cb52144cba))
+
 ## [1.0.1](https://github.com/Annoto/moodle-local-js/compare/1.0.0...1.0.1) (2024-01-01)
 
 
