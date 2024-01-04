@@ -437,12 +437,12 @@ class AnnotoMoodle {
                     case 'tabs':
                         mutationTarget = mutationList.filter((m) =>
                             (m.target as HTMLElement).classList.contains('yui3-tab-panel-selected')
-                        )[0].target as HTMLElement;
+                        )[0]?.target as HTMLElement;
                         break;
                     case 'grid':
                         mutationTarget = mutationList.filter(
                             (m) => !(m.target as HTMLElement).classList.contains('hide_section')
-                        )[0].target as HTMLElement;
+                        )[0]?.target as HTMLElement;
                         break;
                     case 'topcoll':
                         mutationTarget = mutationList[0].target as HTMLElement;
@@ -450,22 +450,23 @@ class AnnotoMoodle {
                     case 'snap':
                         mutationTarget = mutationList.filter((m) =>
                             (m.target as HTMLElement).classList.contains('state-visible')
-                        )[0].target as HTMLElement;
+                        )[0]?.target as HTMLElement;
                         break;
                     case 'modtab':
                         mutationTarget = mutationList.filter((m) =>
                             (m.target as HTMLElement).classList.contains(
                                 'TabbedPanelsContentVisible'
                             )
-                        )[0].target as HTMLElement;
+                        )[0]?.target as HTMLElement;
                         break;
                     case 'modtabDivs':
                         mutationTarget = mutationList.filter((m) => {
                             if (m.type !== 'attributes') {
                                 return false;
                             }
-                            return (m.target as HTMLElement).classList.contains('active');
-                        })[0].target as HTMLElement;
+                            const { classList } = m.target as HTMLElement;
+                            return classList.contains('active') && classList.contains('show');
+                        })[0]?.target as HTMLElement;
                         break;
                     default:
                         break;
@@ -473,7 +474,9 @@ class AnnotoMoodle {
             } else {
                 switch (moodleFormat) {
                     case 'modtabDivs':
-                        mutationTarget = document.body.querySelector(`${this.formatSelectors.modtabDivs}.active`) || document.body;
+                        mutationTarget = document.body.querySelector(
+                            `${this.formatSelectors.modtabDivs}.active`
+                        );
                         break;
                     default:
                         break;
