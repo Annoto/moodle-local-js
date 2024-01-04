@@ -253,6 +253,8 @@ class AnnotoMoodle {
         if (this.bootsrapDone) {
             return;
         }
+        // TODO: first search can find wrong player element (ex. modtabDivs)
+        // because wrong one appears first in DOM, after some time it replaced by correct one
         const playerEl = this.findPlayer();
 
         if (playerEl) {
@@ -464,6 +466,14 @@ class AnnotoMoodle {
                             }
                             return (m.target as HTMLElement).classList.contains('active');
                         })[0].target as HTMLElement;
+                        break;
+                    default:
+                        break;
+                }
+            } else {
+                switch (moodleFormat) {
+                    case 'modtabDivs':
+                        mutationTarget = document.body.querySelector(`${this.formatSelectors.modtabDivs}.active`) || document.body;
                         break;
                     default:
                         break;
