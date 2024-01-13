@@ -20,6 +20,7 @@ import {
     MoodlePageFormatType,
 } from './interfaces';
 import { debounce, parseMoodleVersion } from './util';
+import { AnnotoMoodleTiles } from './formats/tiles';
 
 export { IMoodleJsParams } from './interfaces';
 
@@ -44,7 +45,7 @@ try {
     /* empty */
 }
 
-class AnnotoMoodle {
+export class AnnotoMoodle {
     params!: IMoodleJsParams;
     isSetup = false;
     bootsrapDone = false;
@@ -56,6 +57,8 @@ class AnnotoMoodle {
     playerElement?: HTMLElement;
     videojsResolvePromise?: Promise<unknown>;
     moodleFormat: MoodlePageFormatType = 'plain';
+    log: typeof log = log;
+    moodleAnnoto: typeof moodleAnnoto = moodleAnnoto;
 
     setup(params: IMoodleJsParams): void {
         if (this.isSetup) {
@@ -67,7 +70,9 @@ class AnnotoMoodle {
         this.params = params;
 
         this.detectFormat();
-        this.tilesInit();
+        if (this.moodleFormat === 'tiles') {
+            AnnotoMoodleTiles.init(this);
+        }
         this.icontentInit();
         this.kalturaInit();
         this.wistiaIframeEmbedInit();
@@ -567,62 +572,6 @@ class AnnotoMoodle {
                 }
             });
         });
-    }
-
-    tilesInit(): void {
-        if (this.moodleFormat !== 'tiles') {
-            return;
-        }
-
-        const reloadAnnoto = (mutationList: MutationRecord[]): void => {
-            let mutationTarget: MutationRecord[] = [];
-
-            if (mutationList) {
-                mutationTarget = mutationList.filter(
-                    (m) =>
-                        m.attributeName === 'class' &&
-                        (m.target as Element).classList.contains('state-visible')
-                );
-            }
-
-            if (!mutationTarget.length) {
-                if (this.annotoAPI && this.isloaded) {
-                    this.annotoAPI.destroy().then(() => {
-                        this.isloaded = false;
-                    });
-                }
-                return;
-            }
-            log.info('AnnotoMoodle: reload on tiles change');
-            setTimeout(() => {
-                const player = this.findPlayer(mutationTarget[0].target as HTMLElement);
-
-                if (player) {
-                    if (this.bootsrapDone) {
-                        this.prepareConfig();
-                        this.annotoAPI?.load(this.config).then(() => {
-                            this.isloaded = true;
-                        });
-                    } else {
-                        this.bootsrapDone = this.isloaded = true; // FIXME: set isLoaded only after boot
-                        moodleAnnoto.require(
-                            [this.params.bootstrapUrl],
-                            this.bootWidget.bind(this)
-                        );
-                    }
-                }
-            }, 2000);
-        };
-
-        const observerNodeTargets = document.querySelectorAll(this.formatSelectors.tiles);
-
-        if (observerNodeTargets.length > 0) {
-            const observer = new MutationObserver(reloadAnnoto);
-
-            observerNodeTargets.forEach((target) => {
-                observer.observe(target, { attributes: true, childList: false, subtree: false });
-            });
-        }
     }
 
     icontentInit(): void {
