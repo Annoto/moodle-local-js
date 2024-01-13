@@ -63,22 +63,23 @@ export class AnnotoMoodleTiles {
 
     private static updateActiveTile(activeTile: HTMLElement): void {
         this.addSubscriptionForOpenPageElements(activeTile);
-        const player = this.parent.findPlayer(activeTile);
-
-        if (player) {
-            if (this.parent.bootsrapDone) {
-                this.parent.prepareConfig();
-                this.parent.annotoAPI?.load(this.parent.config).then(() => {
-                    this.isloaded = true;
-                });
-            } else {
-                this.parent.bootsrapDone = this.isloaded = true; // FIXME: set isLoaded only after boot
-                this.parent.moodleAnnoto.require(
-                    [this.parent.params.bootstrapUrl],
-                    this.parent.bootWidget.bind(this.parent)
-                );
+        setTimeout(() => {
+            const player = this.parent.findPlayer(activeTile);
+            if (player) {
+                if (this.parent.bootsrapDone) {
+                    this.parent.prepareConfig();
+                    this.parent.annotoAPI?.load(this.parent.config).then(() => {
+                        this.isloaded = true;
+                    });
+                } else {
+                    this.parent.bootsrapDone = this.isloaded = true; // FIXME: set isLoaded only after boot
+                    this.parent.moodleAnnoto.require(
+                        [this.parent.params.bootstrapUrl],
+                        this.parent.bootWidget.bind(this.parent)
+                    );
+                }
             }
-        }
+        }, 2000);
     }
 
     private static addSubscriptionForOpenPageElements(activeTile: HTMLElement): void {
