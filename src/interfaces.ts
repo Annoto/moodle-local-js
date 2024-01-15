@@ -14,12 +14,15 @@ export interface IMoodleJsParams {
     deploymentDomain: string;
     moodleVersion: string;
     moodleRelease: string;
+    cmid?: string;
+    activityCompletionEnabled?: boolean;
 }
 
 export interface IMoodleAnnoto {
     $: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     log: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     notification: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    Ajax?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     VimeoPlayer: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     videojs?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     kApp: {
@@ -62,3 +65,8 @@ export interface IMoodleRelease {
 }
 
 export type MoodlePageFormatType = 'plain' | 'tabs' | 'grid' | 'topcoll' | 'snap' | 'modtab' | 'tiles' | 'icontent' | 'modtabDivs';
+
+export interface IMoodleCompletionPostResponse {
+    status: boolean;
+    message: string;
+}

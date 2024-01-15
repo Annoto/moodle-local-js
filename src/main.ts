@@ -5,6 +5,7 @@ import {
     IGroupDetails,
     IHooks,
     IMediaDetails,
+    IMyActivity,
     IPlayerConfig,
     IWidgetBackendOptions,
     PlayerType,
@@ -14,6 +15,7 @@ import {
     IKalturaKdp,
     IMoodle,
     IMoodleAnnoto,
+    IMoodleCompletionPostResponse,
     IMoodleJsParams,
     IMoodleRelease,
     KalturaKdpMapType,
@@ -56,6 +58,7 @@ class AnnotoMoodle {
     playerElement?: HTMLElement;
     videojsResolvePromise?: Promise<unknown>;
     moodleFormat: MoodlePageFormatType = 'plain';
+    myActivity?: IMyActivity;
 
     setup(params: IMoodleJsParams): void {
         if (this.isSetup) {
@@ -333,6 +336,10 @@ class AnnotoMoodle {
             api.auth(jwt).catch(() => {
                 log.error('AnnotoMoodle: SSO auth error');
             });
+            // subscribe to my activity only if user is logged in
+            if (this.params.activityCompletionEnabled) {
+                Annoto.on(`my_activity`, this.myActivityHandle);
+            }
         } else {
             log.info('AnnotoMoodle: SSO auth skipped');
         }
@@ -738,6 +745,33 @@ class AnnotoMoodle {
             });
         }
     }
+
+    myActivityHandle = (data: IMyActivity): void => {
+        const { activityCompletionEnabled, cmid } = this.params;
+        log.info(`AnnotoMoodle: got my_activity event`);
+        
+        if (!activityCompletionEnabled || !cmid || !moodleAnnoto.Ajax) {
+            log.warn('AnnotoMoodle: skip my_activity handling, activity completion not supported');
+            return;
+        }
+        
+        this.myActivity = data;
+        moodleAnnoto.Ajax.call([
+            {
+                methodname: 'local_annoto_set_completion',
+                args: {
+                    data: JSON.stringify({
+                        ...data,
+                        cmid: this.params.cmid,
+                    }),
+                },
+                done: (result: IMoodleCompletionPostResponse): void => {
+                    log.info(`AnnotoCompletion result (${result?.status}): ${result?.message}`);
+                },
+                fail: moodleAnnoto.notification.exception,
+            },
+        ]);
+    };
 }
 
 export const annotoMoodleLocal = new AnnotoMoodle();
