@@ -2,6 +2,8 @@ import {
     Annoto as AnnotoMain,
     IAnnotoApi,
     IConfig,
+    IFrameMessage,
+    IFrameResponse,
     IGroupDetails,
     IHooks,
     IMediaDetails,
@@ -73,6 +75,7 @@ class AnnotoMoodle {
         this.tilesInit();
         this.icontentInit();
         this.kalturaInit();
+        this.kalturaModInit();
         this.wistiaIframeEmbedInit();
         $(document).ready(this.bootstrap.bind(this));
     }
@@ -138,6 +141,7 @@ class AnnotoMoodle {
             modtabDivs: '#page-mod-tab-view #TabbedPanelsTabContent > div',
             tiles: 'body.format-tiles #multi_section_tiles li.section.main.moveablesection',
             icontent: doNotMatchSelector,
+            kalvidres: doNotMatchSelector,
         };
     }
 
@@ -169,6 +173,8 @@ class AnnotoMoodle {
             } else {
                 this.moodleFormat = 'modtab';
             }
+        } else if (document.body.id === 'page-mod-kalvidres-view') {
+            this.moodleFormat = 'kalvidres';
         } else if (document.body.classList.contains('format-tiles')) {
             this.moodleFormat = 'tiles';
         } else if (document.body.classList.contains('path-mod-icontent')) {
@@ -189,6 +195,83 @@ class AnnotoMoodle {
         } else {
             log.info('AnnotoMoodle: Kaltura not loaded on init');
         }
+    }
+
+    kalturaModInit(): void {
+        const { moodleFormat } = this;
+        if (moodleFormat !== 'kalvidres') {
+            return;
+        }
+        const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
+        log.info('AnnotoMoodle: Kaltura mod detected: ', !!iframEl);
+
+        if (!iframEl) {
+            log.info('AnnotoMoodle: Kaltura mod iframe not found');
+            return;
+        }
+        const { activityCompletionEnabled } = this.params;
+        if (!activityCompletionEnabled) {
+            // nothing to do here
+            return;
+        }
+        const subscriptionId = `annoto_kaltura_mod_${iframEl.id}`;
+        let subscriptionDone = false;
+        window.addEventListener(
+            'message',
+            (ev) => {
+                try {
+                    const data = JSON.parse(ev.data) as IFrameResponse;
+                    if (data.aud !== 'annoto_widget' || data.id !== subscriptionId) {
+                        return;
+                    }
+                    if (data.err) {
+                        log.error(`AnnotoMoodle: Kaltura mod iframe API error: ${data.err}`);
+                        return;
+                    }
+
+                    if (data.type === 'subscribe') {
+                        log.info(`AnnotoMoodle: Kaltura mod subscribed to my_activity`);
+                        subscriptionDone = true;
+                        return;
+                    }
+                    if (data.type === 'event') {
+                        const { data: eventData } = data as IFrameResponse<'event'>;
+                        if (eventData?.eventName === 'my_activity') {
+                            this.myActivityHandle(eventData.eventData as IMyActivity);
+                        }
+                    }
+                } catch (e) {
+                    /* empty */
+                }
+            },
+            false
+        );
+
+        const subscribeToMyActivity = (): void => {
+            if (subscriptionDone) {
+                return;
+            }
+            const msg: IFrameMessage<'subscribe'> = {
+                aud: 'annoto_widget',
+                id: subscriptionId,
+                action: 'subscribe',
+                data: 'my_activity',
+            };
+            try {
+                // we have no way to know if it's v2 with nested iframe of v7, so send to both
+                const v2PlayerFrame = iframEl.contentWindow?.frames[0];
+                if (v2PlayerFrame) {
+                    v2PlayerFrame.postMessage(JSON.stringify(msg), '*');
+                }
+                iframEl.contentWindow?.postMessage(JSON.stringify(msg), '*');
+                log.info('AnnotoMoodle: Kaltura mod request subscribeToMyActivity');
+            } catch (e) {
+                /* empty */
+            }
+            setTimeout(subscribeToMyActivity, 2000);
+        };
+
+        subscribeToMyActivity();
     }
 
     hasAnnotoTag(): boolean {
@@ -749,12 +832,12 @@ class AnnotoMoodle {
     myActivityHandle = (data: IMyActivity): void => {
         const { activityCompletionEnabled, cmid } = this.params;
         log.info(`AnnotoMoodle: got my_activity event`);
-        
+
         if (!activityCompletionEnabled || !cmid || !moodleAnnoto.Ajax) {
             log.warn('AnnotoMoodle: skip my_activity handling, activity completion not supported');
             return;
         }
-        
+
         this.myActivity = data;
         moodleAnnoto.Ajax.call([
             {

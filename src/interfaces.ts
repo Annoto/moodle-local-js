@@ -64,7 +64,7 @@ export interface IMoodleRelease {
     patch: number;
 }
 
-export type MoodlePageFormatType = 'plain' | 'tabs' | 'grid' | 'topcoll' | 'snap' | 'modtab' | 'tiles' | 'icontent' | 'modtabDivs';
+export type MoodlePageFormatType = 'plain' | 'tabs' | 'grid' | 'topcoll' | 'snap' | 'modtab' | 'tiles' | 'icontent' | 'modtabDivs' | 'kalvidres';
 
 export interface IMoodleCompletionPostResponse {
     status: boolean;
