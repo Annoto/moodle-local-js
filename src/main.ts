@@ -161,7 +161,6 @@ class AnnotoMoodle {
         return this.videojsResolvePromise;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get tr(): Promise<IMoodleTr> {
         if (moodleAnnoto.tr) {
             return Promise.resolve(moodleAnnoto.tr);
@@ -278,7 +277,7 @@ class AnnotoMoodle {
         log.info('AnnotoMoodle: Kaltura mod detected: ', !!iframEl);
 
         if (!iframEl) {
-            log.info('AnnotoMoodle: Kaltura mod iframe not found');
+            log.warn('AnnotoMoodle: Kaltura mod iframe not found');
             return;
         }
         const { activityCompletionEnabled } = params;
