@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/Annoto/moodle-local-js/compare/1.1.0...1.2.0) (2024-01-17)
+
+
+### Features
+
+* activity completion ([#8](https://github.com/Annoto/moodle-local-js/issues/8)) ([e1868d6](https://github.com/Annoto/moodle-local-js/commit/e1868d6e45573dceeb34ce6035df29a2392f17b8))
+
 ## [1.1.0](https://github.com/Annoto/moodle-local-js/compare/1.0.1...1.1.0) (2024-01-04)
 
 
