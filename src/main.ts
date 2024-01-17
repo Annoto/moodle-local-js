@@ -2,9 +2,12 @@ import {
     Annoto as AnnotoMain,
     IAnnotoApi,
     IConfig,
+    IFrameMessage,
+    IFrameResponse,
     IGroupDetails,
     IHooks,
     IMediaDetails,
+    IMyActivity,
     IPlayerConfig,
     IWidgetBackendOptions,
     PlayerType,
@@ -14,8 +17,10 @@ import {
     IKalturaKdp,
     IMoodle,
     IMoodleAnnoto,
+    IMoodleCompletionPostResponse,
     IMoodleJsParams,
     IMoodleRelease,
+    IMoodleTr,
     KalturaKdpMapType,
     MoodlePageFormatType,
 } from './interfaces';
@@ -56,6 +61,8 @@ class AnnotoMoodle {
     playerElement?: HTMLElement;
     videojsResolvePromise?: Promise<unknown>;
     moodleFormat: MoodlePageFormatType = 'plain';
+    myActivityResponse?: IMyActivity;
+    trPromise?: Promise<IMoodleTr>;
 
     setup(params: IMoodleJsParams): void {
         if (this.isSetup) {
@@ -70,8 +77,10 @@ class AnnotoMoodle {
         this.tilesInit();
         this.icontentInit();
         this.kalturaInit();
+        this.kalturaModInit();
         this.wistiaIframeEmbedInit();
         $(document).ready(this.bootstrap.bind(this));
+        this.updateCompletionStatus();
     }
 
     get hooks(): IHooks {
@@ -135,6 +144,7 @@ class AnnotoMoodle {
             modtabDivs: '#page-mod-tab-view #TabbedPanelsTabContent > div',
             tiles: 'body.format-tiles #multi_section_tiles li.section.main.moveablesection',
             icontent: doNotMatchSelector,
+            kalvidres: doNotMatchSelector,
         };
     }
 
@@ -149,6 +159,73 @@ class AnnotoMoodle {
             });
         }
         return this.videojsResolvePromise;
+    }
+
+    get tr(): Promise<IMoodleTr> {
+        if (moodleAnnoto.tr) {
+            return Promise.resolve(moodleAnnoto.tr);
+        }
+        if (!this.trPromise) {
+            this.trPromise = new Promise((resolve) => {
+                moodleAnnoto.require(['core/str'], resolve);
+            });
+        }
+        return this.trPromise;
+    }
+
+    get myActivity(): IMyActivity | undefined {
+        const {
+            myActivityResponse,
+            params: { activityCompletionReq },
+        } = this;
+        return (
+            myActivityResponse ??
+            (activityCompletionReq?.user_data?.data
+                ? JSON.parse(activityCompletionReq.user_data.data)
+                : undefined)
+        );
+    }
+
+    get completionInfoEl(): HTMLElement | null {
+        return document.querySelector('.activity-information > [data-region="completion-info"]');
+    }
+
+    get isActivityCompleted(): boolean {
+        const { params, myActivity, canCompleteActivity } = this;
+        const { activityCompletionEnabled: enabled, activityCompletionReq: req } = params;
+        if (!canCompleteActivity) {
+            return false;
+        }
+
+        if (!enabled || !req) {
+            return true;
+        }
+
+        if (enabled && !myActivity) {
+            return false;
+        }
+        const totalView = +req.totalview;
+        const comments = +req.comments;
+        const replies = +req.replies;
+        const emptyReq = totalView <= 0 && comments <= 0 && replies <= 0;
+        const viewCompleted = totalView === 0 || (myActivity && totalView <= myActivity.completion);
+        const commentsCompleted = comments === 0 || (myActivity && comments <= myActivity.comments);
+        const repliesCompleted = replies === 0 || (myActivity && replies <= myActivity.replies);
+
+        return !!(emptyReq || (viewCompleted && commentsCompleted && repliesCompleted));
+    }
+
+    get isModerator(): boolean {
+        const { userScope } = this.params;
+        return userScope === 'super-mod';
+    }
+
+    get canCompleteActivity(): boolean {
+        const {
+            isModerator,
+            params: { userIsEnrolled },
+        } = this;
+        return !!(!isModerator && userIsEnrolled);
     }
 
     detectFormat(): void {
@@ -166,6 +243,8 @@ class AnnotoMoodle {
             } else {
                 this.moodleFormat = 'modtab';
             }
+        } else if (document.body.id === 'page-mod-kalvidres-view') {
+            this.moodleFormat = 'kalvidres';
         } else if (document.body.classList.contains('format-tiles')) {
             this.moodleFormat = 'tiles';
         } else if (document.body.classList.contains('path-mod-icontent')) {
@@ -186,6 +265,85 @@ class AnnotoMoodle {
         } else {
             log.info('AnnotoMoodle: Kaltura not loaded on init');
         }
+    }
+
+    kalturaModInit(): void {
+        const { moodleFormat, params, canCompleteActivity } = this;
+        if (moodleFormat !== 'kalvidres') {
+            return;
+        }
+
+        const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
+        log.info('AnnotoMoodle: Kaltura mod detected: ', !!iframEl);
+
+        if (!iframEl) {
+            log.warn('AnnotoMoodle: Kaltura mod iframe not found');
+            return;
+        }
+        const { activityCompletionEnabled } = params;
+
+        if (!activityCompletionEnabled || !canCompleteActivity) {
+            // nothing to do here
+            return;
+        }
+        const subscriptionId = `annoto_kaltura_mod_${iframEl.id}`;
+        let subscriptionDone = false;
+        window.addEventListener(
+            'message',
+            (ev) => {
+                try {
+                    const data = JSON.parse(ev.data) as IFrameResponse;
+                    if (data.aud !== 'annoto_widget' || data.id !== subscriptionId) {
+                        return;
+                    }
+                    if (data.err) {
+                        log.error(`AnnotoMoodle: Kaltura mod iframe API error: ${data.err}`);
+                        return;
+                    }
+
+                    if (data.type === 'subscribe') {
+                        log.info(`AnnotoMoodle: Kaltura mod subscribed to my_activity`);
+                        subscriptionDone = true;
+                        return;
+                    }
+                    if (data.type === 'event') {
+                        const { data: eventData } = data as IFrameResponse<'event'>;
+                        if (eventData?.eventName === 'my_activity') {
+                            this.myActivityHandle(eventData.eventData as IMyActivity);
+                        }
+                    }
+                } catch (e) {
+                    /* empty */
+                }
+            },
+            false
+        );
+
+        const subscribeToMyActivity = (): void => {
+            if (subscriptionDone) {
+                return;
+            }
+            const msg: IFrameMessage<'subscribe'> = {
+                aud: 'annoto_widget',
+                id: subscriptionId,
+                action: 'subscribe',
+                data: 'my_activity',
+            };
+            try {
+                // we have no way to know if it's v2 with nested iframe of v7, so send to both
+                const v2PlayerFrame = iframEl.contentWindow?.frames[0];
+                if (v2PlayerFrame) {
+                    v2PlayerFrame.postMessage(JSON.stringify(msg), '*');
+                }
+                iframEl.contentWindow?.postMessage(JSON.stringify(msg), '*');
+                log.info('AnnotoMoodle: Kaltura mod request subscribeToMyActivity');
+            } catch (e) {
+                /* empty */
+            }
+            setTimeout(subscribeToMyActivity, 2000);
+        };
+
+        subscribeToMyActivity();
     }
 
     hasAnnotoTag(): boolean {
@@ -324,15 +482,21 @@ class AnnotoMoodle {
     }
 
     annotoReady(api: IAnnotoApi): void {
+        const { params, canCompleteActivity } = this;
+        const { userToken, activityCompletionEnabled } = params;
         // Api is the API to be used after Annoot is setup
         // It can be used for SSO auth.
         this.annotoAPI = api;
-        const jwt = this.params.userToken;
+        const jwt = userToken;
         log.info('AnnotoMoodle: widget ready');
         if (jwt && jwt !== '') {
             api.auth(jwt).catch(() => {
                 log.error('AnnotoMoodle: SSO auth error');
             });
+            // subscribe to my activity only if user is logged in
+            if (activityCompletionEnabled && canCompleteActivity) {
+                Annoto.on(`my_activity`, this.myActivityHandle);
+            }
         } else {
             log.info('AnnotoMoodle: SSO auth skipped');
         }
@@ -737,6 +901,159 @@ class AnnotoMoodle {
                 }
             });
         }
+    }
+
+    async updateCompletionStatus(): Promise<void> {
+        const { params, isActivityCompleted, myActivity, canCompleteActivity } = this;
+        const { activityCompletionEnabled, activityCompletionReq } = params;
+
+        log.info(
+            `AnnotoMoodle: update completion status: ${JSON.stringify({
+                activityCompletionEnabled,
+                isActivityCompleted,
+                completionInfoEl: !!this.completionInfoEl,
+                activityCompletionReq: !!activityCompletionReq,
+                myActivity: !!myActivity,
+            })}`
+        );
+
+        if (!activityCompletionEnabled) {
+            return;
+        }
+
+        this.addCompletionInfoSectionIfMissing();
+        const { completionInfoEl } = this;
+        if (!completionInfoEl) {
+            return;
+        }
+
+        const requirementLabel = await this.getString(
+            'overallaggregation',
+            'completion',
+            'Completion requirements'
+        );
+        const text = !canCompleteActivity
+            ? requirementLabel
+            : await this.getString(
+                  isActivityCompleted ? 'done' : 'completeactivity',
+                  'completion',
+                  isActivityCompleted ? 'Done' : 'Complete activity'
+              );
+
+        let reqDetailsHtml: string[] = [];
+        if (activityCompletionReq) {
+            const reqDetails: { icon: string; value: string }[] = [];
+            if (+activityCompletionReq.totalview > 0) {
+                reqDetails.push({
+                    icon: 'play',
+                    value: !canCompleteActivity
+                        ? `${activityCompletionReq.totalview}%`
+                        : `${myActivity?.completion || 0}/${activityCompletionReq.totalview}%`,
+                });
+            }
+            if (+activityCompletionReq.comments > 0) {
+                reqDetails.push({
+                    icon: 'comments',
+                    value: !canCompleteActivity
+                        ? `${activityCompletionReq.comments}`
+                        : `${myActivity?.comments || 0}/${activityCompletionReq.comments}`,
+                });
+            }
+            if (+activityCompletionReq.replies > 0) {
+                reqDetails.push({
+                    icon: 'reply',
+                    value: !canCompleteActivity
+                        ? `${activityCompletionReq.replies}`
+                        : `${myActivity?.replies || 0}/${activityCompletionReq.replies}`,
+                });
+            }
+            if (reqDetails.length > 0) {
+                reqDetailsHtml = [
+                    ...reqDetails.map(
+                        (item) => `
+                            <span style="padding:0 4px;">
+                                <i class="icon fa fa-${item.icon} fa-fw" aria-hidden="true" style="font-size:16px;"></i> ${item.value}
+                            </span>
+                        `
+                    ),
+                ];
+            }
+        }
+        moodleAnnoto.$(completionInfoEl).html(`
+            <div class="automatic-completion-conditions" data-region="completionrequirements" role="list" aria-label="${requirementLabel}">
+                <span class="badge badge-pill ${
+                    isActivityCompleted ? 'alert-success' : 'badge-light'
+                }" role="listitem">
+                    <span><img src="https://cdn.annoto.net/assets/latest/images/icon.svg" aria-hidden="true" style="width:16px;height:auto;"> ${text}</span>
+                    ${reqDetailsHtml.join('')}
+                </span>
+            </div>
+        `);
+    }
+
+    addCompletionInfoSectionIfMissing(): void {
+        if (this.completionInfoEl) {
+            return;
+        }
+        moodleAnnoto.$('#maincontent').after(`
+            <div data-region="activity-information" class="activity-information">
+                <div class="completion-info" data-region="completion-info"></div>
+            </div>
+        `);
+    }
+
+    myActivityHandle = (data: IMyActivity): void => {
+        const { params, canCompleteActivity } = this;
+        const { activityCompletionEnabled, cmid } = params;
+        log.info(`AnnotoMoodle: got my_activity event`);
+
+        if (!activityCompletionEnabled || !cmid || !moodleAnnoto.Ajax || !canCompleteActivity) {
+            log.warn('AnnotoMoodle: skip my_activity handling, activity completion not supported');
+            return;
+        }
+
+        moodleAnnoto.Ajax.call([
+            {
+                methodname: 'local_annoto_set_completion',
+                args: {
+                    data: JSON.stringify({
+                        ...data,
+                        cmid: this.params.cmid,
+                    }),
+                },
+                done: (result: IMoodleCompletionPostResponse): void => {
+                    log.info(
+                        `AnnotoMoodle: completion result (${result?.status}): ${result?.message}`
+                    );
+                    if (result?.status) {
+                        this.myActivityResponse = data;
+                        this.updateCompletionStatus();
+                    }
+                },
+                fail: moodleAnnoto.notification.exception,
+            },
+        ]);
+    };
+
+    /**
+     * Safely Get translated string or user the default value
+     * @param key
+     * @param component
+     * @param defaultResult
+     * @returns
+     */
+    async getString(key: string, component: string, defaultResult = ''): Promise<string> {
+        try {
+            const tr = await this.tr;
+            const result = await tr.get_string(key, component);
+            if (!result) {
+                log.warn(`AnnotoMoodle: getString: ${key} for component ${component} not found`);
+            }
+            return result || defaultResult;
+        } catch (err) {
+            log.error(`AnnotoMoodle: getString error: ${err}`);
+        }
+        return defaultResult;
     }
 }
 
