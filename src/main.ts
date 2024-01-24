@@ -419,23 +419,21 @@ export class AnnotoMoodle {
         // TODO: first search can find wrong player element (ex. modtabDivs)
         // because wrong one appears first in DOM, after some time it replaced by correct one
         const playerEl = this.findPlayer();
-
+        const innerPageWrapper = document.getElementById('page-wrapper');
+        if (innerPageWrapper) {
+            const annotoWrapper = document.createElement('div');
+            annotoWrapper.id = 'annoto-app';
+            innerPageWrapper.appendChild(annotoWrapper);
+            log.info('AnnotoMoodle: appended annoto-app container');
+        }
         if (playerEl) {
-            const innerPageWrapper = document.getElementById('page-wrapper');
-            if (innerPageWrapper) {
-                const annotoWrapper = document.createElement('div');
-                annotoWrapper.id = 'annoto-app';
-                innerPageWrapper.appendChild(annotoWrapper);
-                log.info('AnnotoMoodle: appended annoto-app container');
-            }
-
             this.bootsrapDone = true;
             moodleAnnoto.require([this.params.bootstrapUrl], this.bootWidget.bind(this));
         }
     }
 
     prepareConfig(): void {
-        const { config, playerId, playerType } = this;
+        const { config, playerId, playerType, playerElement } = this;
         const nonOverlayTimelinePlayers = ['youtube', 'vimeo'];
 
         config.widgets[0].player.type = playerType as PlayerType;

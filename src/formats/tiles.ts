@@ -1,7 +1,10 @@
+import { IMoodleAnnoto } from 'interfaces';
 import { AnnotoMoodle } from '../main';
 
 const DEFULT_SEARCH_INTERVAL = 200;
 const DEFULT_SEARCH_COUNT = 20;
+const { moodleAnnoto } = window as unknown as { moodleAnnoto: IMoodleAnnoto };
+const { $ } = moodleAnnoto;
 
 export class AnnotoMoodleTiles {
     private static parent: AnnotoMoodle;
@@ -120,6 +123,11 @@ export class AnnotoMoodleTiles {
                         this.parent.annotoAPI &&
                         this.isloaded
                     ) {
+                        const innerPageWrapper = document.getElementById('page-wrapper');
+                        const annotoAppElement = $(`#annoto-app`);
+                        if (annotoAppElement && innerPageWrapper) {
+                            annotoAppElement.appendTo(innerPageWrapper)
+                        }
                         this.parent.annotoAPI.destroy().then(() => {
                             this.isloaded = false;
                         });
@@ -131,6 +139,13 @@ export class AnnotoMoodleTiles {
                     childList: false,
                     subtree: false,
                 });
+                const modalContent = modalWindow.querySelector('.modal-content') as HTMLElement;
+                modalContent.style.overflow = 'unset';
+                const annotoAppElement = $(`#annoto-app`);
+                if (annotoAppElement) {
+                    annotoAppElement.appendTo(modalContent)
+                }
+  
                 if (this.parent.bootsrapDone) {
                     this.parent.prepareConfig();
                     this.parent.annotoAPI?.load(this.parent.config).then(() => {
