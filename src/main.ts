@@ -262,7 +262,6 @@ class AnnotoMoodle {
     localPluginInit(): void {
         const { moodleFormat, params, canCompleteActivity } = this;
         const { activityCompletionEnabled } = params;
-        console.log('localPluginInit', moodleFormat)
         if (moodleFormat !== 'lti') {
             return;
         }
