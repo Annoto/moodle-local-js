@@ -78,6 +78,7 @@ class AnnotoMoodle {
         this.icontentInit();
         this.kalturaInit();
         this.kalturaModInit();
+        this.localPluginInit();
         this.wistiaIframeEmbedInit();
         $(document).ready(this.bootstrap.bind(this));
         this.updateCompletionStatus();
@@ -253,6 +254,73 @@ class AnnotoMoodle {
             this.moodleFormat = 'plain';
         }
         log.info(`AnnotoMoodle: detected activity format: ${this.moodleFormat}`);
+    }
+
+    localPluginInit(): void {
+        const { moodleFormat, params, canCompleteActivity } = this;
+        const { activityCompletionEnabled } = params;
+        const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
+        if (moodleFormat !== 'plain' || !iframEl) {
+            return;
+        }
+
+        if (!activityCompletionEnabled || !canCompleteActivity) {
+            // nothing to do here
+            return;
+        }
+        const subscriptionId = `annoto_plain_mod_${iframEl.id}`;
+        let subscriptionDone = false;
+        window.addEventListener(
+            'message',
+            (ev) => {
+                try {
+                    const data = JSON.parse(ev.data) as IFrameResponse;
+                    if (data.aud !== 'annoto_widget' || data.id !== subscriptionId) {
+                        return;
+                    }
+                    if (data.err) {
+                        log.error(`AnnotoMoodle: Plain mod iframe API error: ${data.err}`);
+                        return;
+                    }
+
+                    if (data.type === 'subscribe') {
+                        log.info(`AnnotoMoodle: Plain mod subscribed to my_activity`);
+                        subscriptionDone = true;
+                        return;
+                    }
+                    if (data.type === 'event') {
+                        const { data: eventData } = data as IFrameResponse<'event'>;
+                        if (eventData?.eventName === 'my_activity') {
+                            this.myActivityHandle(eventData.eventData as IMyActivity);
+                        }
+                    }
+                } catch (e) {
+                    /* empty */
+                }
+            },
+            false
+        );
+
+        const subscribeToMyActivity = (): void => {
+            if (subscriptionDone) {
+                return;
+            }
+            const msg: IFrameMessage<'subscribe'> = {
+                aud: 'annoto_widget',
+                id: subscriptionId,
+                action: 'subscribe',
+                data: 'my_activity',
+            };
+            try {
+                iframEl.contentWindow?.postMessage(JSON.stringify(msg), '*');
+                log.info('AnnotoMoodle: Kaltura mod request subscribeToMyActivity');
+            } catch (e) {
+                /* empty */
+            }
+            setTimeout(subscribeToMyActivity, 2000);
+        };
+
+        subscribeToMyActivity();
     }
 
     kalturaInit(): void {
@@ -488,6 +556,7 @@ class AnnotoMoodle {
         // It can be used for SSO auth.
         this.annotoAPI = api;
         const jwt = userToken;
+        console.log('annotoReady')
         log.info('AnnotoMoodle: widget ready');
         if (jwt && jwt !== '') {
             api.auth(jwt).catch(() => {
