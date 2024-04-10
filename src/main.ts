@@ -146,6 +146,7 @@ class AnnotoMoodle {
             tiles: 'body.format-tiles #multi_section_tiles li.section.main.moveablesection',
             icontent: doNotMatchSelector,
             kalvidres: doNotMatchSelector,
+            lti: doNotMatchSelector,
         };
     }
 
@@ -250,6 +251,8 @@ class AnnotoMoodle {
             this.moodleFormat = 'tiles';
         } else if (document.body.classList.contains('path-mod-icontent')) {
             this.moodleFormat = 'icontent';
+        } else if (document.body.id = 'page-mod-lti-view') {
+            this.moodleFormat = 'lti';
         } else {
             this.moodleFormat = 'plain';
         }
@@ -259,10 +262,11 @@ class AnnotoMoodle {
     localPluginInit(): void {
         const { moodleFormat, params, canCompleteActivity } = this;
         const { activityCompletionEnabled } = params;
-        const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
-        if (moodleFormat !== 'plain' || !iframEl) {
+        console.log('localPluginInit', moodleFormat)
+        if (moodleFormat !== 'lti') {
             return;
         }
+        const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
 
         if (!activityCompletionEnabled || !canCompleteActivity) {
             // nothing to do here
@@ -556,7 +560,6 @@ class AnnotoMoodle {
         // It can be used for SSO auth.
         this.annotoAPI = api;
         const jwt = userToken;
-        console.log('annotoReady')
         log.info('AnnotoMoodle: widget ready');
         if (jwt && jwt !== '') {
             api.auth(jwt).catch(() => {
