@@ -271,7 +271,7 @@ class AnnotoMoodle {
             // nothing to do here
             return;
         }
-        const subscriptionId = `annoto_plain_mod_${iframEl.id}`;
+        const subscriptionId = `annoto_lti_mod_${iframEl.id}`;
         let subscriptionDone = false;
         window.addEventListener(
             'message',
