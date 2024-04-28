@@ -4,14 +4,14 @@
   "description": "Annoto Moodle local plugin Javascript",
   "license": "Apache-2.0",
   "author": "Genadi Sokolov [genadi@annoto.net]",
-  "main": "dist/local.js",
+  "main": "dist/annoto.js",
   "engines": {
     "node": ">=18.0",
     "npm": ">=9.0"
   },
   "private": true,
   "publishConfig": {
-    "access": "public"
+    "access": "restricted"
   },
   "scripts": {
     "prebuild": "npm run lint",
