@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/Annoto/moodle-local-js/compare/1.2.0...1.3.0) (2024-04-29)
+
+
+### Features
+
+* Annoto completion support for Annoto LTI assignments ([#10](https://github.com/Annoto/moodle-local-js/issues/10)) ([b87f679](https://github.com/Annoto/moodle-local-js/commit/b87f679c87e838b6700e496123a641153a7d285f))
+
 ## [1.2.0](https://github.com/Annoto/moodle-local-js/compare/1.1.0...1.2.0) (2024-01-17)
 
 
