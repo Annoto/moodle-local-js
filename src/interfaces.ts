@@ -78,7 +78,8 @@ export type MoodlePageFormatType =
     | 'tiles'
     | 'icontent'
     | 'modtabDivs'
-    | 'kalvidres';
+    | 'kalvidres'
+    | 'lti';
 
 export interface IMoodleTr {
     get_string: (key: string, component: string) => Promise<string>;
