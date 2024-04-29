@@ -78,7 +78,7 @@ class AnnotoMoodle {
         this.icontentInit();
         this.kalturaInit();
         this.kalturaModInit();
-        this.localPluginInit();
+        this.annotoLtiInit();
         this.wistiaIframeEmbedInit();
         $(document).ready(this.bootstrap.bind(this));
         this.updateCompletionStatus();
@@ -251,7 +251,7 @@ class AnnotoMoodle {
             this.moodleFormat = 'tiles';
         } else if (document.body.classList.contains('path-mod-icontent')) {
             this.moodleFormat = 'icontent';
-        } else if (document.body.id = 'page-mod-lti-view') {
+        } else if (document.body.id === 'page-mod-lti-view') {
             this.moodleFormat = 'lti';
         } else {
             this.moodleFormat = 'plain';
@@ -259,13 +259,19 @@ class AnnotoMoodle {
         log.info(`AnnotoMoodle: detected activity format: ${this.moodleFormat}`);
     }
 
-    localPluginInit(): void {
+    annotoLtiInit(): void {
         const { moodleFormat, params, canCompleteActivity } = this;
         const { activityCompletionEnabled } = params;
         if (moodleFormat !== 'lti') {
             return;
         }
         const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
+        log.info('AnnotoMoodle: LTI mod detected: ', !!iframEl);
+
+        if (!iframEl) {
+            log.warn('AnnotoMoodle: LTI mod iframe not found');
+            return;
+        }
 
         if (!activityCompletionEnabled || !canCompleteActivity) {
             // nothing to do here
@@ -282,12 +288,12 @@ class AnnotoMoodle {
                         return;
                     }
                     if (data.err) {
-                        log.error(`AnnotoMoodle: Plain mod iframe API error: ${data.err}`);
+                        log.error(`AnnotoMoodle: LTI mod iframe API error: ${data.err}`);
                         return;
                     }
 
                     if (data.type === 'subscribe') {
-                        log.info(`AnnotoMoodle: Plain mod subscribed to my_activity`);
+                        log.info(`AnnotoMoodle: LTI mod subscribed to my_activity`);
                         subscriptionDone = true;
                         return;
                     }
