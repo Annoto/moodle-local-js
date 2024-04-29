@@ -78,6 +78,7 @@ class AnnotoMoodle {
         this.icontentInit();
         this.kalturaInit();
         this.kalturaModInit();
+        this.annotoLtiInit();
         this.wistiaIframeEmbedInit();
         $(document).ready(this.bootstrap.bind(this));
         this.updateCompletionStatus();
@@ -145,6 +146,7 @@ class AnnotoMoodle {
             tiles: 'body.format-tiles #multi_section_tiles li.section.main.moveablesection',
             icontent: doNotMatchSelector,
             kalvidres: doNotMatchSelector,
+            lti: doNotMatchSelector,
         };
     }
 
@@ -249,10 +251,85 @@ class AnnotoMoodle {
             this.moodleFormat = 'tiles';
         } else if (document.body.classList.contains('path-mod-icontent')) {
             this.moodleFormat = 'icontent';
+        } else if (document.body.id === 'page-mod-lti-view') {
+            this.moodleFormat = 'lti';
         } else {
             this.moodleFormat = 'plain';
         }
         log.info(`AnnotoMoodle: detected activity format: ${this.moodleFormat}`);
+    }
+
+    annotoLtiInit(): void {
+        const { moodleFormat, params, canCompleteActivity } = this;
+        const { activityCompletionEnabled } = params;
+        if (moodleFormat !== 'lti') {
+            return;
+        }
+        const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
+        log.info('AnnotoMoodle: LTI mod detected: ', !!iframEl);
+
+        if (!iframEl) {
+            log.warn('AnnotoMoodle: LTI mod iframe not found');
+            return;
+        }
+
+        if (!activityCompletionEnabled || !canCompleteActivity) {
+            // nothing to do here
+            return;
+        }
+        const subscriptionId = `annoto_lti_mod_${iframEl.id}`;
+        let subscriptionDone = false;
+        window.addEventListener(
+            'message',
+            (ev) => {
+                try {
+                    const data = JSON.parse(ev.data) as IFrameResponse;
+                    if (data.aud !== 'annoto_widget' || data.id !== subscriptionId) {
+                        return;
+                    }
+                    if (data.err) {
+                        log.error(`AnnotoMoodle: LTI mod iframe API error: ${data.err}`);
+                        return;
+                    }
+
+                    if (data.type === 'subscribe') {
+                        log.info(`AnnotoMoodle: LTI mod subscribed to my_activity`);
+                        subscriptionDone = true;
+                        return;
+                    }
+                    if (data.type === 'event') {
+                        const { data: eventData } = data as IFrameResponse<'event'>;
+                        if (eventData?.eventName === 'my_activity') {
+                            this.myActivityHandle(eventData.eventData as IMyActivity);
+                        }
+                    }
+                } catch (e) {
+                    /* empty */
+                }
+            },
+            false
+        );
+
+        const subscribeToMyActivity = (): void => {
+            if (subscriptionDone) {
+                return;
+            }
+            const msg: IFrameMessage<'subscribe'> = {
+                aud: 'annoto_widget',
+                id: subscriptionId,
+                action: 'subscribe',
+                data: 'my_activity',
+            };
+            try {
+                iframEl.contentWindow?.postMessage(JSON.stringify(msg), '*');
+                log.info('AnnotoMoodle: Kaltura mod request subscribeToMyActivity');
+            } catch (e) {
+                /* empty */
+            }
+            setTimeout(subscribeToMyActivity, 2000);
+        };
+
+        subscribeToMyActivity();
     }
 
     kalturaInit(): void {
