@@ -141,6 +141,7 @@ class AnnotoMoodle {
             topcoll: 'body.format-topcoll .ctopics.topics .toggledsection ',
             tabs: 'body.format-tabtopics .yui3-tab-panel',
             snap: 'body.format-topics.theme-snap .topics .section.main',
+            snapMultiple: 'body.format-topics.theme-snap #snap-course-wrapper .section .activity',
             modtab: '#page-mod-tab-view .TabbedPanelsContentGroup .TabbedPanelsContent',
             modtabDivs: '#page-mod-tab-view #TabbedPanelsTabContent > div',
             tiles: 'body.format-tiles #multi_section_tiles li.section.main.moveablesection',
@@ -238,7 +239,11 @@ class AnnotoMoodle {
         } else if (typeof M.format_topcoll !== 'undefined') {
             this.moodleFormat = 'topcoll';
         } else if (typeof M.snapTheme !== 'undefined') {
-            this.moodleFormat = 'snap';
+            if (document.querySelector(this.formatSelectors.snapMultiple)) {
+                this.moodleFormat = 'snapMultiple';
+            } else {
+                this.moodleFormat = 'snap';
+            }
         } else if (document.body.id === 'page-mod-tab-view') {
             if (document.querySelector('#page-mod-tab-view #TabbedPanelsTabContent > div')) {
                 this.moodleFormat = 'modtabDivs';
@@ -509,7 +514,10 @@ class AnnotoMoodle {
     prepareConfig(): void {
         const { config, playerId, playerType } = this;
         const nonOverlayTimelinePlayers = ['youtube', 'vimeo'];
-
+        // Avoid changing directly the style of the player element bacause it can break the player CSS for some customers
+        if (this.moodleFormat === 'snapMultiple') {
+            config.widgets[0].player.styleElement = this.playerElement?.parentElement as HTMLElement;
+        }
         config.widgets[0].player.type = playerType as PlayerType;
         config.widgets[0].player.element = `#${playerId}`;
         config.widgets[0].timeline = {
@@ -662,6 +670,7 @@ class AnnotoMoodle {
             'grid',
             'topcoll',
             'snap',
+            'snapMultiple',
             'modtab',
             'modtabDivs',
         ];
@@ -692,6 +701,9 @@ class AnnotoMoodle {
                         mutationTarget = mutationList.filter((m) =>
                             (m.target as HTMLElement).classList.contains('state-visible')
                         )[0]?.target as HTMLElement;
+                        break;
+                    case 'snapMultiple':
+                        mutationTarget = mutationList[0]?.target as HTMLElement;
                         break;
                     case 'modtab':
                         mutationTarget = mutationList.filter((m) =>
@@ -910,7 +922,7 @@ class AnnotoMoodle {
     }
 
     async findMultiplePlayers(): Promise<void> {
-        if (this.moodleFormat !== 'plain') {
+        if (!['plain', 'snapMultiple'].includes(this.moodleFormat)) {
             return;
         }
         const vimeos = $('body').find('iframe[src*="vimeo.com"]').get();

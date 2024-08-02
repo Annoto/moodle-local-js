@@ -74,6 +74,7 @@ export type MoodlePageFormatType =
     | 'grid'
     | 'topcoll'
     | 'snap'
+    | 'snapMultiple'
     | 'modtab'
     | 'tiles'
     | 'icontent'
