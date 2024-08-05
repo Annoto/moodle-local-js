@@ -7,11 +7,11 @@ const { moodleAnnoto } = window as unknown as { moodleAnnoto: IMoodleAnnoto };
 const { $ } = moodleAnnoto;
 
 export class AnnotoMoodleTiles {
-    private static parent: AnnotoMoodle;
+    private static annotoMoodle: AnnotoMoodle;
     private static isloaded = false;
 
-    static init = (parent: AnnotoMoodle): void => {
-        this.parent = parent;
+    static init = (annotoMoodle: AnnotoMoodle): void => {
+        this.annotoMoodle = annotoMoodle;
 
         let activeTileObserver: MutationObserver;
         const handleUpdateOfActiveTile = () => {
@@ -24,13 +24,13 @@ export class AnnotoMoodleTiles {
                     searchCount += 1;
                     if (searchCount > DEFULT_SEARCH_COUNT) {
                         clearInterval(findActiveTileInterval);
-                        this.parent.log.info('AnnotoMoodle: modal player not found');
+                        this.annotoMoodle.log.info('AnnotoMoodle: modal player not found');
                     }
                     return;
                 }
                 clearInterval(findActiveTileInterval);
-                if (this.parent.annotoAPI && this.isloaded) {
-                    this.parent.annotoAPI.destroy().then(() => {
+                if (this.annotoMoodle.annotoAPI && this.isloaded) {
+                    this.annotoMoodle.annotoAPI.destroy().then(() => {
                         this.isloaded = false;
                     });
                 }
@@ -48,7 +48,7 @@ export class AnnotoMoodleTiles {
                     childList: true,
                     subtree: false,
                 });
-                this.parent.log.info('AnnotoMoodle: reload on active tile change');
+                this.annotoMoodle.log.info('AnnotoMoodle: reload on active tile change');
             }, DEFULT_SEARCH_INTERVAL);
         };
 
@@ -67,18 +67,18 @@ export class AnnotoMoodleTiles {
     private static updateActiveTile(activeTile: HTMLElement): void {
         this.addSubscriptionForOpenPageElements(activeTile);
         setTimeout(() => {
-            const player = this.parent.findPlayer(activeTile);
+            const player = this.annotoMoodle.findPlayer(activeTile);
             if (player) {
-                if (this.parent.bootsrapDone) {
-                    this.parent.prepareConfig();
-                    this.parent.annotoAPI?.load(this.parent.config).then(() => {
+                if (this.annotoMoodle.bootsrapDone) {
+                    this.annotoMoodle.prepareConfig();
+                    this.annotoMoodle.annotoAPI?.load(this.annotoMoodle.config).then(() => {
                         this.isloaded = true;
                     });
                 } else {
-                    this.parent.bootsrapDone = this.isloaded = true; // FIXME: set isLoaded only after boot
-                    this.parent.moodleAnnoto.require(
-                        [this.parent.params.bootstrapUrl],
-                        this.parent.bootWidget.bind(this.parent)
+                    this.annotoMoodle.bootsrapDone = this.isloaded = true; // FIXME: set isLoaded only after boot
+                    this.annotoMoodle.moodleAnnoto.require(
+                        [this.annotoMoodle.params.bootstrapUrl],
+                        this.annotoMoodle.bootWidget.bind(this.annotoMoodle)
                     );
                 }
             }
@@ -101,7 +101,7 @@ export class AnnotoMoodleTiles {
                     searchCount += 1;
                     if (searchCount > DEFULT_SEARCH_COUNT) {
                         clearInterval(findModalInterval);
-                        this.parent.log.info('AnnotoMoodle: modal not found');
+                        this.annotoMoodle.log.info('AnnotoMoodle: modal not found');
                     }
                 }, DEFULT_SEARCH_INTERVAL);
             };
@@ -112,23 +112,23 @@ export class AnnotoMoodleTiles {
     private static handleOpenModalWindow = (modalWindow: HTMLElement) => {
         let searchCount = 0;
         const findPlayerInterval = setInterval(() => {
-            const player = this.parent.findPlayer(modalWindow);
+            const player = this.annotoMoodle.findPlayer(modalWindow);
 
             if (player) {
                 clearInterval(findPlayerInterval);
+                const annotoAppElement = $(`#annoto-app`);
                 const observer = new MutationObserver((mutationList: MutationRecord[]) => {
                     const targetModal = mutationList[0].target as HTMLElement;
                     if (
                         targetModal.classList.contains('hide') &&
-                        this.parent.annotoAPI &&
+                        this.annotoMoodle.annotoAPI &&
                         this.isloaded
                     ) {
                         const innerPageWrapper = document.getElementById('page-wrapper');
-                        const annotoAppElement = $(`#annoto-app`);
                         if (annotoAppElement && innerPageWrapper) {
                             annotoAppElement.appendTo(innerPageWrapper)
                         }
-                        this.parent.annotoAPI.destroy().then(() => {
+                        this.annotoMoodle.annotoAPI.destroy().then(() => {
                             this.isloaded = false;
                         });
                         observer.disconnect();
@@ -141,28 +141,27 @@ export class AnnotoMoodleTiles {
                 });
                 const modalContent = modalWindow.querySelector('.modal-content') as HTMLElement;
                 modalContent.style.overflow = 'unset';
-                const annotoAppElement = $(`#annoto-app`);
                 if (annotoAppElement) {
                     annotoAppElement.appendTo(modalContent)
                 }
   
-                if (this.parent.bootsrapDone) {
-                    this.parent.prepareConfig();
-                    this.parent.annotoAPI?.load(this.parent.config).then(() => {
+                if (this.annotoMoodle.bootsrapDone) {
+                    this.annotoMoodle.prepareConfig();
+                    this.annotoMoodle.annotoAPI?.load(this.annotoMoodle.config).then(() => {
                         this.isloaded = true;
                     });
                 } else {
-                    this.parent.bootsrapDone = this.isloaded = true; // FIXME: set isLoaded only after boot
-                    this.parent.moodleAnnoto.require(
-                        [this.parent.params.bootstrapUrl],
-                        this.parent.bootWidget.bind(this.parent)
+                    this.annotoMoodle.bootsrapDone = this.isloaded = true; // FIXME: set isLoaded only after boot
+                    this.annotoMoodle.moodleAnnoto.require(
+                        [this.annotoMoodle.params.bootstrapUrl],
+                        this.annotoMoodle.bootWidget.bind(this.annotoMoodle)
                     );
                 }
             } else {
                 searchCount += 1;
                 if (searchCount > DEFULT_SEARCH_COUNT) {
                     clearInterval(findPlayerInterval);
-                    this.parent.log.info('AnnotoMoodle: modal player not found');
+                    this.annotoMoodle.log.info('AnnotoMoodle: modal player not found');
                 }
             }
         }, DEFULT_SEARCH_INTERVAL);
