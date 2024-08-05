@@ -15,6 +15,7 @@ export class AnnotoMoodleTiles {
 
         let activeTileObserver: MutationObserver;
         let closedTileSearchInterval: ReturnType<typeof setInterval>;
+        // Subscribe to click event on elements that considered as buttons that will open a tile section
         const handleUpdateOfActiveTile = () => {
             let searchCount = 0;
             const findActiveTileInterval = setInterval(() => {
@@ -25,22 +26,25 @@ export class AnnotoMoodleTiles {
                     searchCount += 1;
                     if (searchCount > DEFULT_SEARCH_COUNT) {
                         clearInterval(findActiveTileInterval);
-                        this.annotoMoodle.log.info('AnnotoMoodle: modal player not found');
+                        this.annotoMoodle.log.info('AnnotoMoodle: visible tile section not found');
                     }
                     return;
                 }
                 clearInterval(findActiveTileInterval);
+                // If annoto was already loaded, destroy it before loading it again
                 if (this.annotoMoodle.annotoAPI && this.isloaded) {
                     this.annotoMoodle.annotoAPI.destroy().then(() => {
                         this.isloaded = false;
                     });
                 }
+                // Disconnect previous observer if exists to avoid multiple observers
                 if (activeTileObserver) {
                     activeTileObserver.disconnect();
                 }
                 if (closedTileSearchInterval) {
                     clearInterval(closedTileSearchInterval);
                 }
+                // Subscribe to close of visible tile section, which not open a new one to close the annoto widget if it was open
                 closedTileSearchInterval = setInterval(() => {
                     const activeTile = $(
                         'body.format-tiles #multi_section_tiles li.section.main.moveablesection.state-visible'
@@ -84,6 +88,7 @@ export class AnnotoMoodleTiles {
 
     private static updateActiveTile(activeTile: HTMLElement): void {
         this.addSubscriptionForOpenPageElements(activeTile);
+        // Load annoto widget for possible player in the active tile section
         setTimeout(() => {
             const player = this.annotoMoodle.findPlayer(activeTile);
             if (player) {
@@ -103,6 +108,7 @@ export class AnnotoMoodleTiles {
         }, 2000);
     }
 
+    // Subscribe to click event on elements that considered as buttons that will open a modal window
     private static addSubscriptionForOpenPageElements(activeTile: HTMLElement): void {
         const pageOpenModElements = $(activeTile).find(
             'li.activity.activity-wrapper.modtype_page a'
@@ -127,6 +133,7 @@ export class AnnotoMoodleTiles {
         });
     }
 
+    // Find and load annoto widget for player in the modal window
     private static handleOpenModalWindow = (modalWindow: HTMLElement) => {
         let searchCount = 0;
         const findPlayerInterval = setInterval(() => {
@@ -137,6 +144,7 @@ export class AnnotoMoodleTiles {
                 const annotoAppElement = $(`#annoto-app`);
                 const observer = new MutationObserver((mutationList: MutationRecord[]) => {
                     const targetModal = mutationList[0].target as HTMLElement;
+                    // close annoto widget if modal window was closed
                     if (
                         targetModal.classList.contains('hide') &&
                         this.annotoMoodle.annotoAPI &&
@@ -144,6 +152,7 @@ export class AnnotoMoodleTiles {
                     ) {
                         const innerPageWrapper = document.getElementById('page-wrapper');
                         if (annotoAppElement && innerPageWrapper) {
+                            // Append annoto widget to the page wrapper back for feature modal windows
                             annotoAppElement.appendTo(innerPageWrapper)
                         }
                         this.annotoMoodle.annotoAPI.destroy().then(() => {
@@ -158,7 +167,9 @@ export class AnnotoMoodleTiles {
                     subtree: false,
                 });
                 const modalContent = modalWindow.querySelector('.modal-content') as HTMLElement;
+                // Avoid not needed scroll in modal window
                 modalContent.style.overflow = 'unset';
+                // Append annoto app element to the modal window because only in this case it will be visible
                 if (annotoAppElement) {
                     annotoAppElement.appendTo(modalContent)
                 }
