@@ -14,6 +14,7 @@ export class AnnotoMoodleTiles {
         this.annotoMoodle = annotoMoodle;
 
         let activeTileObserver: MutationObserver;
+        let closedTileSearchInterval: ReturnType<typeof setInterval>;
         const handleUpdateOfActiveTile = () => {
             let searchCount = 0;
             const findActiveTileInterval = setInterval(() => {
@@ -37,6 +38,23 @@ export class AnnotoMoodleTiles {
                 if (activeTileObserver) {
                     activeTileObserver.disconnect();
                 }
+                if (closedTileSearchInterval) {
+                    clearInterval(closedTileSearchInterval);
+                }
+                closedTileSearchInterval = setInterval(() => {
+                    const activeTile = $(
+                        'body.format-tiles #multi_section_tiles li.section.main.moveablesection.state-visible'
+                    )[0];
+                    if (!activeTile) {
+                        clearInterval(closedTileSearchInterval);
+                        activeTileObserver.disconnect();
+                        if (this.annotoMoodle.annotoAPI && this.isloaded) {
+                            this.annotoMoodle.annotoAPI.destroy().then(() => {
+                                this.isloaded = false;
+                            });
+                        }
+                    }
+                }, DEFULT_SEARCH_INTERVAL);
                 // on reload of active tile, happens in different time, for example resize
                 // used to avoid lose of click subscription
                 activeTileObserver = new MutationObserver(() => {
