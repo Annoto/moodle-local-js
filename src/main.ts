@@ -516,7 +516,7 @@ class AnnotoMoodle {
         const nonOverlayTimelinePlayers = ['youtube', 'vimeo'];
         // Avoid changing directly the style of the player element bacause it can break the player CSS for some customers
         if (this.moodleFormat === 'snapMultiple') {
-            config.widgets[0].player.styleElement = this.playerElement?.parentElement as HTMLElement;
+            config.widgets[0].positionElement = this.playerElement?.parentElement as HTMLElement;
         }
         config.widgets[0].player.type = playerType as PlayerType;
         config.widgets[0].player.element = `#${playerId}`;
