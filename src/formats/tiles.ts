@@ -8,7 +8,6 @@ const { $ } = moodleAnnoto;
 
 export class AnnotoMoodleTiles {
     private static annotoMoodle: AnnotoMoodle;
-    private static isloaded = false;
 
     static init = (annotoMoodle: AnnotoMoodle): void => {
         this.annotoMoodle = annotoMoodle;
@@ -32,10 +31,8 @@ export class AnnotoMoodleTiles {
                 }
                 clearInterval(findActiveTileInterval);
                 // If annoto was already loaded, destroy it before loading it again
-                if (this.annotoMoodle.annotoAPI && this.isloaded) {
-                    this.annotoMoodle.annotoAPI.destroy().then(() => {
-                        this.isloaded = false;
-                    });
+                if (this.annotoMoodle.isloaded) {
+                    this.annotoMoodle.destroyWidget();
                 }
                 // Disconnect previous observer if exists to avoid multiple observers
                 if (activeTileObserver) {
@@ -52,10 +49,8 @@ export class AnnotoMoodleTiles {
                     if (!activeTile) {
                         clearInterval(closedTileSearchInterval);
                         activeTileObserver.disconnect();
-                        if (this.annotoMoodle.annotoAPI && this.isloaded) {
-                            this.annotoMoodle.annotoAPI.destroy().then(() => {
-                                this.isloaded = false;
-                            });
+                        if (this.annotoMoodle.isloaded) {
+                            this.annotoMoodle.destroyWidget();
                         }
                     }
                 }, DEFULT_SEARCH_INTERVAL);
@@ -90,20 +85,10 @@ export class AnnotoMoodleTiles {
         this.addSubscriptionForOpenPageElements(activeTile);
         // Load annoto widget for possible player in the active tile section
         setTimeout(() => {
-            const player = this.annotoMoodle.findPlayer(activeTile);
-            if (player) {
-                if (this.annotoMoodle.bootsrapDone) {
-                    this.annotoMoodle.prepareConfig();
-                    this.annotoMoodle.annotoAPI?.load(this.annotoMoodle.config).then(() => {
-                        this.isloaded = true;
-                    });
-                } else {
-                    this.annotoMoodle.bootsrapDone = this.isloaded = true; // FIXME: set isLoaded only after boot
-                    this.annotoMoodle.moodleAnnoto.require(
-                        [this.annotoMoodle.params.bootstrapUrl],
-                        this.annotoMoodle.bootWidget.bind(this.annotoMoodle)
-                    );
-                }
+            if (this.annotoMoodle.bootsrapDone) {
+                this.annotoMoodle.loadWidget(activeTile);
+            } else {
+                this.annotoMoodle.bootstrap();
             }
         }, 2000);
     }
@@ -147,17 +132,14 @@ export class AnnotoMoodleTiles {
                     // close annoto widget if modal window was closed
                     if (
                         targetModal.classList.contains('hide') &&
-                        this.annotoMoodle.annotoAPI &&
-                        this.isloaded
+                        this.annotoMoodle.isloaded
                     ) {
                         const innerPageWrapper = document.getElementById('page-wrapper');
                         if (annotoAppElement && innerPageWrapper) {
                             // Append annoto widget to the page wrapper back for feature modal windows
                             annotoAppElement.appendTo(innerPageWrapper)
                         }
-                        this.annotoMoodle.annotoAPI.destroy().then(() => {
-                            this.isloaded = false;
-                        });
+                        this.annotoMoodle.destroyWidget();
                         observer.disconnect();
                     }
                 });
@@ -175,16 +157,9 @@ export class AnnotoMoodleTiles {
                 }
   
                 if (this.annotoMoodle.bootsrapDone) {
-                    this.annotoMoodle.prepareConfig();
-                    this.annotoMoodle.annotoAPI?.load(this.annotoMoodle.config).then(() => {
-                        this.isloaded = true;
-                    });
+                    this.annotoMoodle.loadWidget(modalContent);
                 } else {
-                    this.annotoMoodle.bootsrapDone = this.isloaded = true; // FIXME: set isLoaded only after boot
-                    this.annotoMoodle.moodleAnnoto.require(
-                        [this.annotoMoodle.params.bootstrapUrl],
-                        this.annotoMoodle.bootWidget.bind(this.annotoMoodle)
-                    );
+                    this.annotoMoodle.bootstrap();
                 }
             } else {
                 searchCount += 1;
