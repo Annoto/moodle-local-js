@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/Annoto/moodle-local-js/compare/1.3.0...1.3.1) (2024-08-13)
+
+
+### Bug Fixes
+
+* snap theme support ([#12](https://github.com/Annoto/moodle-local-js/issues/12)) ([cb4e2d9](https://github.com/Annoto/moodle-local-js/commit/cb4e2d9a519582e1c97d552d5469a4eb94c094b2))
+
 ## [1.3.0](https://github.com/Annoto/moodle-local-js/compare/1.2.0...1.3.0) (2024-04-29)
 
 
