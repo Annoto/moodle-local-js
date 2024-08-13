@@ -1,4 +1,4 @@
-import { IConfig } from '@annoto/widget-api';
+import { IConfig, PlayerType } from '@annoto/widget-api';
 
 export interface IMoodleJsParams {
     loginUrl: string;
@@ -121,4 +121,10 @@ export enum ActivityCompletionTrackingType {
     MANUAL = '1',
     AUTOMATIC = '2',
     ANNOTO = '9',
+}
+
+export interface IPlayerParams {
+    playerType: PlayerType;
+    playerId: string;
+    playerElement: HTMLElement;
 }
