@@ -1,5 +1,4 @@
-import { IMoodleAnnoto } from 'interfaces';
-import { AnnotoMoodle } from '../main';
+import { IAnnotoMoodleMain, IMoodleAnnoto } from 'interfaces';
 
 const DEFULT_SEARCH_INTERVAL = 200;
 const DEFULT_SEARCH_COUNT = 20;
@@ -7,10 +6,10 @@ const { moodleAnnoto } = window as unknown as { moodleAnnoto: IMoodleAnnoto };
 const { $ } = moodleAnnoto;
 
 export class AnnotoMoodleTiles {
-    private static annotoMoodle: AnnotoMoodle;
+    private static annotoMoodle: IAnnotoMoodleMain;
 
-    static init = (annotoMoodle: AnnotoMoodle): void => {
-        this.annotoMoodle = annotoMoodle;
+    static init(main: IAnnotoMoodleMain): void {
+        this.annotoMoodle = main;
 
         let activeTileObserver: MutationObserver;
         let closedTileSearchInterval: ReturnType<typeof setInterval>;
@@ -31,7 +30,7 @@ export class AnnotoMoodleTiles {
                 }
                 clearInterval(findActiveTileInterval);
                 // If annoto was already loaded, destroy it before loading it again
-                if (this.annotoMoodle.isloaded) {
+                if (this.annotoMoodle.isWidgetLoaded) {
                     this.annotoMoodle.destroyWidget();
                 }
                 // Disconnect previous observer if exists to avoid multiple observers
@@ -49,7 +48,7 @@ export class AnnotoMoodleTiles {
                     if (!activeTile) {
                         clearInterval(closedTileSearchInterval);
                         activeTileObserver.disconnect();
-                        if (this.annotoMoodle.isloaded) {
+                        if (this.annotoMoodle.isWidgetLoaded) {
                             this.annotoMoodle.destroyWidget();
                         }
                     }
@@ -79,10 +78,10 @@ export class AnnotoMoodleTiles {
             }
             handleUpdateOfActiveTile();
         }
-    };
+    }
 
     // Find and load annoto widget for player in the modal window
-    private static handleOpenModalWindow = (modalWindow: HTMLElement): void => {
+    private static handleOpenModalWindow(modalWindow: HTMLElement): void {
         let searchCount = 0;
         const findPlayerInterval = setInterval(() => {
             const player = this.annotoMoodle.findPlayer(modalWindow);
@@ -93,7 +92,10 @@ export class AnnotoMoodleTiles {
                 const observer = new MutationObserver((mutationList: MutationRecord[]) => {
                     const targetModal = mutationList[0].target as HTMLElement;
                     // close annoto widget if modal window was closed
-                    if (targetModal.classList.contains('hide') && this.annotoMoodle.isloaded) {
+                    if (
+                        targetModal.classList.contains('hide') &&
+                        this.annotoMoodle.isWidgetLoaded
+                    ) {
                         const innerPageWrapper = document.getElementById('page-wrapper');
                         if (annotoAppElement && innerPageWrapper) {
                             // Append annoto widget to the page wrapper back for feature modal windows
@@ -116,11 +118,7 @@ export class AnnotoMoodleTiles {
                     annotoAppElement.appendTo(modalContent);
                 }
 
-                if (this.annotoMoodle.bootsrapDone) {
-                    this.annotoMoodle.loadWidget(modalContent);
-                } else {
-                    this.annotoMoodle.bootstrap();
-                }
+                this.annotoMoodle.bootWidget(modalContent);
             } else {
                 searchCount += 1;
                 if (searchCount > DEFULT_SEARCH_COUNT) {
@@ -129,17 +127,11 @@ export class AnnotoMoodleTiles {
                 }
             }
         }, DEFULT_SEARCH_INTERVAL);
-    };
+    }
     private static updateActiveTile(activeTile: HTMLElement): void {
         this.addSubscriptionForOpenPageElements(activeTile);
         // Load annoto widget for possible player in the active tile section
-        setTimeout(() => {
-            if (this.annotoMoodle.bootsrapDone) {
-                this.annotoMoodle.loadWidget(activeTile);
-            } else {
-                this.annotoMoodle.bootstrap();
-            }
-        }, 2000);
+        setTimeout(() => this.annotoMoodle.bootWidget(activeTile), 2000);
     }
 
     // Subscribe to click event on elements that considered as buttons that will open a modal window

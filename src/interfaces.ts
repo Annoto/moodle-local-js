@@ -37,6 +37,18 @@ export interface IMoodleAnnoto {
     setupKalturaKdpMap?: (kdpMap: KalturaKdpMapType) => void;
 }
 
+export interface IAnnotoMoodleMain {
+    readonly log: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    readonly isWidgetLoaded: boolean;
+    /**
+     * Bootstrap or load the widget using annoto api
+     * @param container
+     */
+    bootWidget(container?: HTMLElement | null): Promise<void>;
+    destroyWidget(player?: IPlayerParams): Promise<void>;
+    findPlayer(container?: HTMLElement | null): IPlayerParams | undefined;
+}
+
 export type KalturaKdpMapType = Record<string, IKalturaKdp>; // eslint-disable-line @typescript-eslint/no-explicit-any
 export interface IKalturaKdp {
     id: string;

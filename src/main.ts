@@ -14,6 +14,7 @@ import {
 } from '@annoto/widget-api';
 import { BUILD_ENV } from './constants';
 import {
+    IAnnotoMoodleMain,
     IKalturaKdp,
     IMoodle,
     IMoodleAnnoto,
@@ -51,7 +52,7 @@ try {
     /* empty */
 }
 
-export class AnnotoMoodle {
+class AnnotoMoodle implements IAnnotoMoodleMain {
     params!: IMoodleJsParams;
     isSetup = false;
     bootsrapDone = false;
@@ -61,8 +62,7 @@ export class AnnotoMoodle {
     activePlayer?: IPlayerParams;
     videojsResolvePromise?: Promise<unknown>;
     moodleFormat: MoodlePageFormatType = 'plain';
-    log: typeof log = log;
-    moodleAnnoto: typeof moodleAnnoto = moodleAnnoto;
+    readonly log: typeof log = log;
     myActivityResponse?: IMyActivity;
     trPromise?: Promise<IMoodleTr>;
 
@@ -76,13 +76,25 @@ export class AnnotoMoodle {
         this.params = params;
 
         this.detectFormat();
-        if (this.moodleFormat === 'tiles') {
-            AnnotoMoodleTiles.init(this);
+        const { moodleFormat } = this;
+        switch (moodleFormat) {
+            case 'tiles':
+                AnnotoMoodleTiles.init(this);
+                break;
+            case 'icontent':
+                this.icontentInit();
+                break;
+            case 'kalvidres':
+                this.kalturaModInit();
+                break;
+            case 'lti':
+                this.annotoLtiInit();
+                break;
+            default:
+                break;
         }
-        this.icontentInit();
+
         this.kalturaInit();
-        this.kalturaModInit();
-        this.annotoLtiInit();
         this.wistiaIframeEmbedInit();
         $(document).ready(this.bootstrap.bind(this));
         this.updateCompletionStatus();
@@ -236,6 +248,10 @@ export class AnnotoMoodle {
             params: { userIsEnrolled, userToken },
         } = this;
         return !!(!isModerator && userIsEnrolled && userToken);
+    }
+
+    get isWidgetLoaded(): boolean {
+        return this.isloaded;
     }
 
     detectFormat(): void {
@@ -585,6 +601,13 @@ export class AnnotoMoodle {
         this.checkWidgetVisibility();
         // TODO: fix setup flow for multiple players
         this.findMultiplePlayers();
+    }
+
+    async bootWidget(container?: HTMLElement | null): Promise<void> {
+        if (!this.bootsrapDone) {
+            return this.bootstrap();
+        }
+        return this.loadWidget(container);
     }
 
     /**
