@@ -438,7 +438,7 @@ class AnnotoMoodle {
         const vimeo = $(parent).find('iframe[src*="vimeo.com"]').first().get(0);
         const videojs = $(parent).find('.video-js').first().get(0);
         const jwplayer = $(parent).find('.jwplayer').first().get(0);
-        const wistia = $(parent).find('.wistia_embed').first().get(0);
+        const wistia = $(parent).find('.wistia_embed:not(iframe)').first().get(0);
         const html5 = $(parent).find('video').first().get(0);
         let playerElement: HTMLElement;
         let playerType: PlayerType;
