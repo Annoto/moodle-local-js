@@ -15,7 +15,7 @@ export class AnnotoMoodleTiles {
         let activeTileObserver: MutationObserver;
         let closedTileSearchInterval: ReturnType<typeof setInterval>;
         // Subscribe to click event on elements that considered as buttons that will open a tile section
-        const handleUpdateOfActiveTile = () => {
+        const handleUpdateOfActiveTile = (): void => {
             let searchCount = 0;
             const findActiveTileInterval = setInterval(() => {
                 const activeTile = $(
@@ -81,6 +81,55 @@ export class AnnotoMoodleTiles {
         }
     };
 
+    // Find and load annoto widget for player in the modal window
+    private static handleOpenModalWindow = (modalWindow: HTMLElement): void => {
+        let searchCount = 0;
+        const findPlayerInterval = setInterval(() => {
+            const player = this.annotoMoodle.findPlayer(modalWindow);
+
+            if (player) {
+                clearInterval(findPlayerInterval);
+                const annotoAppElement = $(`#annoto-app`);
+                const observer = new MutationObserver((mutationList: MutationRecord[]) => {
+                    const targetModal = mutationList[0].target as HTMLElement;
+                    // close annoto widget if modal window was closed
+                    if (targetModal.classList.contains('hide') && this.annotoMoodle.isloaded) {
+                        const innerPageWrapper = document.getElementById('page-wrapper');
+                        if (annotoAppElement && innerPageWrapper) {
+                            // Append annoto widget to the page wrapper back for feature modal windows
+                            annotoAppElement.appendTo(innerPageWrapper);
+                        }
+                        this.annotoMoodle.destroyWidget();
+                        observer.disconnect();
+                    }
+                });
+                observer.observe(modalWindow as HTMLElement, {
+                    attributes: true,
+                    childList: false,
+                    subtree: false,
+                });
+                const modalContent = modalWindow.querySelector('.modal-content') as HTMLElement;
+                // Avoid not needed scroll in modal window
+                modalContent.style.overflow = 'unset';
+                // Append annoto app element to the modal window because only in this case it will be visible
+                if (annotoAppElement) {
+                    annotoAppElement.appendTo(modalContent);
+                }
+
+                if (this.annotoMoodle.bootsrapDone) {
+                    this.annotoMoodle.loadWidget(modalContent);
+                } else {
+                    this.annotoMoodle.bootstrap();
+                }
+            } else {
+                searchCount += 1;
+                if (searchCount > DEFULT_SEARCH_COUNT) {
+                    clearInterval(findPlayerInterval);
+                    this.annotoMoodle.log.info('AnnotoMoodle: modal player not found');
+                }
+            }
+        }, DEFULT_SEARCH_INTERVAL);
+    };
     private static updateActiveTile(activeTile: HTMLElement): void {
         this.addSubscriptionForOpenPageElements(activeTile);
         // Load annoto widget for possible player in the active tile section
@@ -99,7 +148,7 @@ export class AnnotoMoodleTiles {
             'li.activity.activity-wrapper.modtype_page a'
         );
         pageOpenModElements.each((_index: unknown, target: HTMLElement) => {
-            const pageOpenClickHandler = () => {
+            const pageOpenClickHandler = (): void => {
                 let searchCount = 0;
                 const findModalInterval = setInterval(() => {
                     const modalWindow = $('.modal.mod_page.show')[0];
@@ -117,58 +166,4 @@ export class AnnotoMoodleTiles {
             $(target).on('click', pageOpenClickHandler);
         });
     }
-
-    // Find and load annoto widget for player in the modal window
-    private static handleOpenModalWindow = (modalWindow: HTMLElement) => {
-        let searchCount = 0;
-        const findPlayerInterval = setInterval(() => {
-            const player = this.annotoMoodle.findPlayer(modalWindow);
-
-            if (player) {
-                clearInterval(findPlayerInterval);
-                const annotoAppElement = $(`#annoto-app`);
-                const observer = new MutationObserver((mutationList: MutationRecord[]) => {
-                    const targetModal = mutationList[0].target as HTMLElement;
-                    // close annoto widget if modal window was closed
-                    if (
-                        targetModal.classList.contains('hide') &&
-                        this.annotoMoodle.isloaded
-                    ) {
-                        const innerPageWrapper = document.getElementById('page-wrapper');
-                        if (annotoAppElement && innerPageWrapper) {
-                            // Append annoto widget to the page wrapper back for feature modal windows
-                            annotoAppElement.appendTo(innerPageWrapper)
-                        }
-                        this.annotoMoodle.destroyWidget();
-                        observer.disconnect();
-                    }
-                });
-                observer.observe(modalWindow as HTMLElement, {
-                    attributes: true,
-                    childList: false,
-                    subtree: false,
-                });
-                const modalContent = modalWindow.querySelector('.modal-content') as HTMLElement;
-                // Avoid not needed scroll in modal window
-                modalContent.style.overflow = 'unset';
-                // Append annoto app element to the modal window because only in this case it will be visible
-                if (annotoAppElement) {
-                    annotoAppElement.appendTo(modalContent)
-                }
-  
-                if (this.annotoMoodle.bootsrapDone) {
-                    this.annotoMoodle.loadWidget(modalContent);
-                } else {
-                    this.annotoMoodle.bootstrap();
-                }
-            } else {
-                searchCount += 1;
-                if (searchCount > DEFULT_SEARCH_COUNT) {
-                    clearInterval(findPlayerInterval);
-                    this.annotoMoodle.log.info('AnnotoMoodle: modal player not found');
-                }
-            }
-        }, DEFULT_SEARCH_INTERVAL);
-    };
 }
-
