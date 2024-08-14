@@ -18,3 +18,8 @@ export const debounce = (func: (...args: any[]) => void, wait = 0): ((...args: a
         timer = setTimeout(func, wait, ...args);
     };
 };
+
+export const delay = (ms: number): Promise<void> =>
+    new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });

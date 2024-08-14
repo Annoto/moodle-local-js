@@ -14,6 +14,7 @@ import {
 } from '@annoto/widget-api';
 import { BUILD_ENV } from './constants';
 import {
+    IAnnotoMoodleMain,
     IKalturaKdp,
     IMoodle,
     IMoodleAnnoto,
@@ -26,6 +27,7 @@ import {
     MoodlePageFormatType,
 } from './interfaces';
 import { debounce, parseMoodleVersion } from './util';
+import { AnnotoMoodleTiles } from './formats/tiles';
 
 export { IMoodleJsParams } from './interfaces';
 
@@ -50,7 +52,7 @@ try {
     /* empty */
 }
 
-class AnnotoMoodle {
+class AnnotoMoodle implements IAnnotoMoodleMain {
     params!: IMoodleJsParams;
     isSetup = false;
     bootsrapDone = false;
@@ -60,8 +62,26 @@ class AnnotoMoodle {
     activePlayer?: IPlayerParams;
     videojsResolvePromise?: Promise<unknown>;
     moodleFormat: MoodlePageFormatType = 'plain';
+    readonly log: typeof log = log;
     myActivityResponse?: IMyActivity;
     trPromise?: Promise<IMoodleTr>;
+    appEl: HTMLElement;
+    appContainer: HTMLElement;
+
+    constructor() {
+        this.appEl = document.createElement('div');
+        this.appEl.id = 'moodle-annoto-app-wrapper';
+        const annotoAppEl = document.createElement('div');
+        annotoAppEl.id = 'annoto-app';
+        this.appEl.appendChild(annotoAppEl);
+        this.appContainer = document.getElementById('page-wrapper') || document.body;
+        this.appContainer.appendChild(this.appEl);
+        $('#annoto-app').on('click', (ev: UIEvent) => {
+            // contain annoto app click events
+            // fixes modal close on clicks inside the widget
+            ev.stopPropagation();
+        });
+    }
 
     setup(params: IMoodleJsParams): void {
         if (this.isSetup) {
@@ -73,11 +93,25 @@ class AnnotoMoodle {
         this.params = params;
 
         this.detectFormat();
-        this.tilesInit();
-        this.icontentInit();
+        const { moodleFormat } = this;
+        switch (moodleFormat) {
+            case 'tiles':
+                AnnotoMoodleTiles.init(this);
+                break;
+            case 'icontent':
+                this.icontentInit();
+                break;
+            case 'kalvidres':
+                this.kalturaModInit();
+                break;
+            case 'lti':
+                this.annotoLtiInit();
+                break;
+            default:
+                break;
+        }
+
         this.kalturaInit();
-        this.kalturaModInit();
-        this.annotoLtiInit();
         this.wistiaIframeEmbedInit();
         $(document).ready(this.bootstrap.bind(this));
         this.updateCompletionStatus();
@@ -146,7 +180,7 @@ class AnnotoMoodle {
             ],
             modtab: ['#page-mod-tab-view .TabbedPanelsContentGroup .TabbedPanelsContent'],
             modtabDivs: ['#page-mod-tab-view #TabbedPanelsTabContent > div'],
-            tiles: ['body.format-tiles #multi_section_tiles li.section.main.moveablesection'],
+            tiles: ['body.format-tiles', 'body.format-tiles #multi_section_tiles li.section.main'],
             icontent: [doNotMatchSelector],
             kalvidres: [doNotMatchSelector],
             lti: [doNotMatchSelector],
@@ -231,6 +265,14 @@ class AnnotoMoodle {
             params: { userIsEnrolled, userToken },
         } = this;
         return !!(!isModerator && userIsEnrolled && userToken);
+    }
+
+    get isWidgetLoaded(): boolean {
+        return this.isloaded;
+    }
+
+    get widgetPlayer(): IPlayerParams | undefined {
+        return this.activePlayer;
     }
 
     detectFormat(): void {
@@ -516,29 +558,21 @@ class AnnotoMoodle {
      * If bootstap is not done, find player, and if found bootWidget
      * @returns
      */
-    bootstrap(): void {
+    bootstrap(container?: HTMLElement | null): void {
         if (this.bootsrapDone) {
             return;
         }
         // FIXME: first search can find wrong player element (ex. modtabDivs) do not boot in this case, wait for mutation
-        const player = this.findPlayer();
+        const player = this.findPlayer(container);
 
         if (player) {
             log.info('AnnotoMoodle: bootstrap');
-            const innerPageWrapper = document.getElementById('page-wrapper');
-            if (innerPageWrapper) {
-                const annotoWrapper = document.createElement('div');
-                annotoWrapper.id = 'annoto-app';
-                innerPageWrapper.appendChild(annotoWrapper);
-                log.info('AnnotoMoodle: appended annoto-app container');
-            }
-
             this.bootsrapDone = true;
             this.config = {
                 ...this.configOverride,
                 widgets: [{ player: {} as IPlayerConfig }],
             };
-            moodleAnnoto.require([this.params.bootstrapUrl], this.bootstrapDone.bind(this));
+            moodleAnnoto.require([this.params.bootstrapUrl], () => this.bootstrapDone(container));
         } else {
             log.info('AnnotoMoodle: bootstrap skipped - player not found');
         }
@@ -548,7 +582,7 @@ class AnnotoMoodle {
      * Call only from bootstrap
      * @returns
      */
-    async bootstrapDone(): Promise<void> {
+    async bootstrapDone(container?: HTMLElement | null): Promise<void> {
         if (!global.Annoto) {
             log.warn('AnnotoMoodle: bootstrap didn`t load');
             return;
@@ -557,7 +591,7 @@ class AnnotoMoodle {
         Annoto.on('ready', this.annotoReady.bind(this));
         this.applyPageScrollFix();
 
-        const player = this.findPlayer();
+        const player = this.findPlayer(container);
         if (!player) {
             return;
         }
@@ -580,6 +614,29 @@ class AnnotoMoodle {
         this.checkWidgetVisibility();
         // TODO: fix setup flow for multiple players
         this.findMultiplePlayers();
+    }
+
+    moveApp(container: HTMLElement): void {
+        const { appEl } = this;
+        if (container !== appEl.parentElement) {
+            container.appendChild(appEl);
+            log.info(`AnnotoMoodle: moved annoto-app to ${container.id || container.className}`);
+        }
+    }
+
+    moveAppBackHome(): void {
+        const { appContainer, appEl } = this;
+        if (appContainer !== appEl.parentElement) {
+            appContainer.appendChild(appEl);
+            log.info('AnnotoMoodle: moved annoto-app back to original container');
+        }
+    }
+
+    async bootWidget(container?: HTMLElement | null): Promise<void> {
+        if (!this.bootsrapDone) {
+            return this.bootstrap(container);
+        }
+        return this.loadWidget(container);
     }
 
     /**
@@ -613,6 +670,7 @@ class AnnotoMoodle {
         if (player && this.activePlayer?.playerId !== player.playerId) {
             return;
         }
+        log.info('AnnotoMoodle: destroy widget');
         this.activePlayer = undefined;
         await this.annotoAPI.destroy();
         this.isloaded = false;
@@ -830,51 +888,6 @@ class AnnotoMoodle {
         });
     }
 
-    tilesInit(): void {
-        if (this.moodleFormat !== 'tiles') {
-            return;
-        }
-
-        const reloadAnnoto = (mutationList: MutationRecord[]): void => {
-            let mutationTarget: MutationRecord[] = [];
-
-            if (mutationList) {
-                mutationTarget = mutationList.filter(
-                    (m) =>
-                        m.attributeName === 'class' &&
-                        (m.target as Element).classList.contains('state-visible')
-                );
-            }
-
-            if (!mutationTarget.length) {
-                if (this.isloaded) {
-                    this.destroyWidget();
-                }
-                return;
-            }
-            log.info('AnnotoMoodle: reload on tiles change');
-            setTimeout(() => {
-                if (this.bootsrapDone) {
-                    this.loadWidget(mutationTarget[0].target as HTMLElement);
-                } else {
-                    this.bootstrap();
-                }
-            }, 2000);
-        };
-
-        const observerNodeTargets = document.querySelectorAll(
-            this.formatSelectors.tiles.join(', ')
-        );
-
-        if (observerNodeTargets.length > 0) {
-            const observer = new MutationObserver(reloadAnnoto);
-
-            observerNodeTargets.forEach((target) => {
-                observer.observe(target, { attributes: true, childList: false, subtree: false });
-            });
-        }
-    }
-
     icontentInit(): void {
         if (this.moodleFormat !== 'icontent') {
             return;
@@ -888,13 +901,7 @@ class AnnotoMoodle {
             }
 
             log.info('AnnotoMoodle: reload on icontent change');
-            setTimeout(() => {
-                if (this.bootsrapDone) {
-                    this.loadWidget(idIcontentPages);
-                } else {
-                    this.bootstrap();
-                }
-            }, 2000);
+            setTimeout(() => this.bootWidget(idIcontentPages), 2000);
         };
 
         wrapper?.addEventListener('click', (event) => {
