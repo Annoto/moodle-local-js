@@ -76,9 +76,9 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         this.appEl.appendChild(annotoAppEl);
         this.appContainer = document.getElementById('page-wrapper') || document.body;
         this.appContainer.appendChild(this.appEl);
-        $('#moodle-annoto-app-wrapper').on('click', (ev: UIEvent) => {
+        $('#annoto-app').on('click', (ev: UIEvent) => {
             // contain annoto app click events
-            // fixes modal close on clicks insights the widget
+            // fixes modal close on clicks inside the widget
             ev.stopPropagation();
         });
     }
@@ -558,12 +558,12 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
      * If bootstap is not done, find player, and if found bootWidget
      * @returns
      */
-    bootstrap(): void {
+    bootstrap(container?: HTMLElement | null): void {
         if (this.bootsrapDone) {
             return;
         }
         // FIXME: first search can find wrong player element (ex. modtabDivs) do not boot in this case, wait for mutation
-        const player = this.findPlayer();
+        const player = this.findPlayer(container);
 
         if (player) {
             log.info('AnnotoMoodle: bootstrap');
@@ -572,7 +572,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                 ...this.configOverride,
                 widgets: [{ player: {} as IPlayerConfig }],
             };
-            moodleAnnoto.require([this.params.bootstrapUrl], this.bootstrapDone.bind(this));
+            moodleAnnoto.require([this.params.bootstrapUrl], () => this.bootstrapDone(container));
         } else {
             log.info('AnnotoMoodle: bootstrap skipped - player not found');
         }
@@ -582,7 +582,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
      * Call only from bootstrap
      * @returns
      */
-    async bootstrapDone(): Promise<void> {
+    async bootstrapDone(container?: HTMLElement | null): Promise<void> {
         if (!global.Annoto) {
             log.warn('AnnotoMoodle: bootstrap didn`t load');
             return;
@@ -591,7 +591,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         Annoto.on('ready', this.annotoReady.bind(this));
         this.applyPageScrollFix();
 
-        const player = this.findPlayer();
+        const player = this.findPlayer(container);
         if (!player) {
             return;
         }
@@ -634,7 +634,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
 
     async bootWidget(container?: HTMLElement | null): Promise<void> {
         if (!this.bootsrapDone) {
-            return this.bootstrap();
+            return this.bootstrap(container);
         }
         return this.loadWidget(container);
     }
@@ -901,13 +901,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             }
 
             log.info('AnnotoMoodle: reload on icontent change');
-            setTimeout(() => {
-                if (this.bootsrapDone) {
-                    this.loadWidget(idIcontentPages);
-                } else {
-                    this.bootstrap();
-                }
-            }, 2000);
+            setTimeout(() => this.bootWidget(idIcontentPages), 2000);
         };
 
         wrapper?.addEventListener('click', (event) => {
