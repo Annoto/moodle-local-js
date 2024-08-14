@@ -38,7 +38,7 @@ export class AnnotoMoodleTiles {
         main.log.info('AnnotoMoodle: tile open state changed: ', this.tileOpen, this.modalOpen);
         if (isModalChanged) {
             // wait for modal to be fully opened so player find give correct results
-            await delay(isModalOpen ? 500 : 100);
+            await delay(isModalOpen ? 500 : 200);
         }
         let container: HTMLElement | null = null;
         if (this.modalOpen) {
@@ -52,7 +52,7 @@ export class AnnotoMoodleTiles {
             main.moveAppBackHome();
         }
         const player = main.findPlayer(container);
-        if (player) {
+        if (player?.playerElement?.offsetParent) {
             main.bootWidget(container);
         } else {
             main.destroyWidget();
@@ -84,12 +84,13 @@ export class AnnotoMoodleTiles {
                 // will make sure widget is properly loaded or destroyed for detached player element
                 this.mutationHandle();
             }
+
+            // failsafe in case of not fired mutation event
+            setInterval(() => {
+                if (this.isTileOpen() !== this.tileOpen || this.isModalOpen() !== this.modalOpen) {
+                    this.handleStateChange();
+                }
+            }, 1000);
         }
-        // failsafe in case of not fired mutation event
-        setInterval(() => {
-            if (this.isTileOpen() !== this.tileOpen || this.isModalOpen() !== this.modalOpen) {
-                this.handleStateChange();
-            }
-        }, 1000);
     }
 }
