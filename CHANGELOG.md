@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/Annoto/moodle-local-js/compare/1.3.1...1.3.2) (2024-08-14)
+
+
+### Bug Fixes
+
+* tiles format support ([#14](https://github.com/Annoto/moodle-local-js/issues/14)) ([e963260](https://github.com/Annoto/moodle-local-js/commit/e9632600ad6aa6c9a25a12de461e70d86e2ea323))
+
 ## [1.3.1](https://github.com/Annoto/moodle-local-js/compare/1.3.0...1.3.1) (2024-08-13)
 
 
