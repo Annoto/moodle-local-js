@@ -65,6 +65,23 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     readonly log: typeof log = log;
     myActivityResponse?: IMyActivity;
     trPromise?: Promise<IMoodleTr>;
+    appEl: HTMLElement;
+    appContainer: HTMLElement;
+
+    constructor() {
+        this.appEl = document.createElement('div');
+        this.appEl.id = 'moodle-annoto-app-wrapper';
+        const annotoAppEl = document.createElement('div');
+        annotoAppEl.id = 'annoto-app';
+        this.appEl.appendChild(annotoAppEl);
+        this.appContainer = document.getElementById('page-wrapper') || document.body;
+        this.appContainer.appendChild(this.appEl);
+        $('#moodle-annoto-app-wrapper').on('click', (ev: UIEvent) => {
+            // contain annoto app click events
+            // fixes modal close on clicks insights the widget
+            ev.stopPropagation();
+        });
+    }
 
     setup(params: IMoodleJsParams): void {
         if (this.isSetup) {
@@ -163,7 +180,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             ],
             modtab: ['#page-mod-tab-view .TabbedPanelsContentGroup .TabbedPanelsContent'],
             modtabDivs: ['#page-mod-tab-view #TabbedPanelsTabContent > div'],
-            tiles: ['body.format-tiles #multi_section_tiles li.section.main.moveablesection'],
+            tiles: ['body.format-tiles', 'body.format-tiles #multi_section_tiles li.section.main'],
             icontent: [doNotMatchSelector],
             kalvidres: [doNotMatchSelector],
             lti: [doNotMatchSelector],
@@ -252,6 +269,10 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
 
     get isWidgetLoaded(): boolean {
         return this.isloaded;
+    }
+
+    get widgetPlayer(): IPlayerParams | undefined {
+        return this.activePlayer;
     }
 
     detectFormat(): void {
@@ -546,14 +567,6 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
 
         if (player) {
             log.info('AnnotoMoodle: bootstrap');
-            const innerPageWrapper = document.getElementById('page-wrapper');
-            if (innerPageWrapper) {
-                const annotoWrapper = document.createElement('div');
-                annotoWrapper.id = 'annoto-app';
-                innerPageWrapper.appendChild(annotoWrapper);
-                log.info('AnnotoMoodle: appended annoto-app container');
-            }
-
             this.bootsrapDone = true;
             this.config = {
                 ...this.configOverride,
@@ -603,6 +616,22 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         this.findMultiplePlayers();
     }
 
+    moveApp(container: HTMLElement): void {
+        const { appEl } = this;
+        if (container !== appEl.parentElement) {
+            container.appendChild(appEl);
+            log.info(`AnnotoMoodle: moved annoto-app to ${container.id || container.className}`);
+        }
+    }
+
+    moveAppBackHome(): void {
+        const { appContainer, appEl } = this;
+        if (appContainer !== appEl.parentElement) {
+            appContainer.appendChild(appEl);
+            log.info('AnnotoMoodle: moved annoto-app back to original container');
+        }
+    }
+
     async bootWidget(container?: HTMLElement | null): Promise<void> {
         if (!this.bootsrapDone) {
             return this.bootstrap();
@@ -641,6 +670,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         if (player && this.activePlayer?.playerId !== player.playerId) {
             return;
         }
+        log.info('AnnotoMoodle: destroy widget');
         this.activePlayer = undefined;
         await this.annotoAPI.destroy();
         this.isloaded = false;

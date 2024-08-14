@@ -40,6 +40,8 @@ export interface IMoodleAnnoto {
 export interface IAnnotoMoodleMain {
     readonly log: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     readonly isWidgetLoaded: boolean;
+    readonly formatSelectors: Record<MoodlePageFormatType, string[]>;
+    readonly widgetPlayer: IPlayerParams | undefined;
     /**
      * Bootstrap or load the widget using annoto api
      * @param container
@@ -47,6 +49,8 @@ export interface IAnnotoMoodleMain {
     bootWidget(container?: HTMLElement | null): Promise<void>;
     destroyWidget(player?: IPlayerParams): Promise<void>;
     findPlayer(container?: HTMLElement | null): IPlayerParams | undefined;
+    moveApp(container: HTMLElement): void;
+    moveAppBackHome(): void;
 }
 
 export type KalturaKdpMapType = Record<string, IKalturaKdp>; // eslint-disable-line @typescript-eslint/no-explicit-any
