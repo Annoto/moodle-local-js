@@ -71,6 +71,9 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     constructor() {
         this.appEl = document.createElement('div');
         this.appEl.id = 'moodle-annoto-app-wrapper';
+        this.appEl.addEventListener('click', (ev: UIEvent) => {
+            ev.stopPropagation();
+        });
         const annotoAppEl = document.createElement('div');
         annotoAppEl.id = 'annoto-app';
         this.appEl.appendChild(annotoAppEl);
