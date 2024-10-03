@@ -47,8 +47,12 @@ export class AnnotoMoodleTiles {
         const player = main.findPlayer(container);
         this.player = player;
         if (player?.playerElement?.offsetParent) {
-            main.bootWidget(container);
             main.findMultiplePlayers(container)
+            if (this.modalOpen) {
+                main.bootWidget(container);
+            } else if (isModalChanged) {
+                main.destroyWidget();
+            }
         } else {
             main.destroyWidget();
         }
