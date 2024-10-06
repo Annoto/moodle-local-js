@@ -76,11 +76,13 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         this.appEl.appendChild(annotoAppEl);
         this.appContainer = document.getElementById('page-wrapper') || document.body;
         this.appContainer.appendChild(this.appEl);
-        $('#annoto-app').on('click', (ev: UIEvent) => {
-            // contain annoto app click events
-            // fixes modal close on clicks inside the widget
+        const stopPropagation = (ev: UIEvent): void => {
             ev.stopPropagation();
-        });
+        };
+        // contain annoto app click events
+        // fixes modal close on clicks inside the widget
+        $('#annoto-app').on('click', stopPropagation);
+        this.appEl.addEventListener('click', stopPropagation);
     }
 
     setup(params: IMoodleJsParams): void {
