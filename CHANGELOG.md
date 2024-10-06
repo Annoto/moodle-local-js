@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.3](https://github.com/Annoto/moodle-local-js/compare/1.3.2...1.3.3) (2024-10-06)
+
+
+### Bug Fixes
+
+* stop propagation of click events from widget to prevent moodle dialog from closing ([#16](https://github.com/Annoto/moodle-local-js/issues/16)) ([89e4c5a](https://github.com/Annoto/moodle-local-js/commit/89e4c5aa8e46652406da29edbd140811d7c68ed4))
+
 ## [1.3.2](https://github.com/Annoto/moodle-local-js/compare/1.3.1...1.3.2) (2024-08-14)
 
 
