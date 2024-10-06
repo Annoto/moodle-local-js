@@ -18,17 +18,17 @@ jobs:
       contents: read
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Setup Node
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '22'
     - name: Install Packages
       run: npm ci
     - name: Build
       run: npm run build
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v3
+      uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: ${{ env.AWS_REGION }}
         role-to-assume: arn:aws:iam::281726344480:role/nn-cdn-deploy-${{ env.REPO_NAME }}
@@ -38,17 +38,15 @@ jobs:
         aws s3 sync ./dist \
         "s3://${{ env.BUCKET_NAME }}/${{ env.REPO_NAME }}/${{ env.APP_VERSION }}/" \
         --cache-control "public,no-transform,max-age=86400" \
-        --delete \
-        --acl public-read
+        --delete
     - name: Sync to S3 latest
       run: |
         aws s3 sync ./dist \
         "s3://${{ env.BUCKET_NAME }}/${{ env.REPO_NAME }}/latest/" \
         --cache-control "no-cache,no-transform,max-age=86400" \
-        --delete \
-        --acl public-read
+        --delete
     - name: Invalidate Cloudfront
       run: |
         aws cloudfront create-invalidation \
         --distribution-id ${{ env.CLOUDFRONT_DIST_ID }} \
-        --paths "/${{ env.REPO_NAME }}/latest/*" "/${{ env.REPO_NAME }}/${{ env.APP_VERSION }}/*"
+        --paths "/${{ env.REPO_NAME }}/latest*" "/${{ env.REPO_NAME }}/${{ env.APP_VERSION }}*"

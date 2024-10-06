@@ -10,9 +10,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: google-github-actions/release-please-action@v3
+      - uses: googleapis/release-please-action@v4
         with:
-          command: manifest
-          default-branch: main
+          release-type: node
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          monorepo-tags: false
