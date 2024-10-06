@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.3](https://github.com/Annoto/moodle-local-js/compare/1.3.3...v1.3.3) (2024-10-06)
+
+
+### Miscellaneous Chores
+
+* release 1.3.3 ([abef528](https://github.com/Annoto/moodle-local-js/commit/abef52883b1814edecd32d17d4a8fb4d00f55349))
+
 ## [1.3.3](https://github.com/Annoto/moodle-local-js/compare/1.3.2...1.3.3) (2024-10-06)
 
 
