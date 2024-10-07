@@ -49,6 +49,7 @@ export interface IAnnotoMoodleMain {
     bootWidget(container?: HTMLElement | null): Promise<void>;
     destroyWidget(player?: IPlayerParams): Promise<void>;
     findPlayer(container?: HTMLElement | null): IPlayerParams | undefined;
+    findMultiplePlayers(container?: HTMLElement | null): Promise<void>;
     moveApp(container: HTMLElement): void;
     moveAppBackHome(): void;
 }
