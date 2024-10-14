@@ -1,4 +1,4 @@
-import { IAnnotoMoodleMain, IMoodleAnnoto, IPlayerParams } from 'interfaces';
+import { IAnnotoMoodleMain, IMoodleAnnoto, IPlayerParams, IVideojsPlayer } from 'interfaces';
 import { debounce, delay } from '../util';
 
 const { moodleAnnoto } = window as unknown as { moodleAnnoto: IMoodleAnnoto };
@@ -19,11 +19,13 @@ export class AnnotoMoodleTiles {
         );
 
     private static handleStateChange = async (): Promise<void> => {
+        console.log("handleStateChange")
         const { main } = this;
         const isModalOpen = this.isModalOpen();
         const isModalChanged = this.modalOpen !== isModalOpen;
         // If it is the same format and player on the page no need to reboot
         if (this.modalOpen && !isModalChanged && !this.player?.playerElement?.offsetParent) {
+            console.log("DISABBLE")
             return;
         }
         this.tileOpen = this.isTileOpen();
@@ -47,12 +49,14 @@ export class AnnotoMoodleTiles {
         const player = main.findPlayer(container);
         this.player = player;
         if (player?.playerElement?.offsetParent) {
-            main.findMultiplePlayers(container)
-            if (this.modalOpen) {
-                main.bootWidget(container);
-            } else if (isModalChanged) {
-                main.destroyWidget();
+            const videojs = await main.videojs;
+            const visibleVideojsPlayer = (Object.values(videojs.getPlayers()) as IVideojsPlayer[]).filter(
+                (player) => document.body.contains(player.el_)
+            )[0];
+            if (!visibleVideojsPlayer) {
+                return;
             }
+            main.bootWidget(container);
         } else {
             main.destroyWidget();
         }

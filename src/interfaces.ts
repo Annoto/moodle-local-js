@@ -42,6 +42,7 @@ export interface IAnnotoMoodleMain {
     readonly isWidgetLoaded: boolean;
     readonly formatSelectors: Record<MoodlePageFormatType, string[]>;
     readonly widgetPlayer: IPlayerParams | undefined;
+    get videojs(): Promise<any>;
     /**
      * Bootstrap or load the widget using annoto api
      * @param container
@@ -144,4 +145,8 @@ export interface IPlayerParams {
     playerType: PlayerType;
     playerId: string;
     playerElement: HTMLElement;
+}
+
+export interface IVideojsPlayer {
+    el_: HTMLElement;
 }
