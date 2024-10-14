@@ -914,13 +914,13 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         });
     }
 
-    async findMultiplePlayers(container?: HTMLElement): Promise<void> {
+    async findMultiplePlayers(): Promise<void> {
         const processedFormats: MoodlePageFormatType[] = ['plain', 'snap'];
-        if (!container && !processedFormats.includes(this.moodleFormat)) {
+        if (!processedFormats.includes(this.moodleFormat)) {
             return;
         }
-        const vimeos = $(container || 'body').find('iframe[src*="vimeo.com"]').get();
-        const videojs = $(container || 'body').find('.video-js').get();
+        const vimeos = $('body').find('iframe[src*="vimeo.com"]').get();
+        const videojs = $('body').find('.video-js').get();
         const allPlayers: {
             vimeo?: HTMLElement[];
             videojs?: HTMLElement[];

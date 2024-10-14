@@ -19,13 +19,11 @@ export class AnnotoMoodleTiles {
         );
 
     private static handleStateChange = async (): Promise<void> => {
-        console.log("handleStateChange")
         const { main } = this;
         const isModalOpen = this.isModalOpen();
         const isModalChanged = this.modalOpen !== isModalOpen;
         // If it is the same format and player on the page no need to reboot
         if (this.modalOpen && !isModalChanged && !this.player?.playerElement?.offsetParent) {
-            console.log("DISABBLE")
             return;
         }
         this.tileOpen = this.isTileOpen();
