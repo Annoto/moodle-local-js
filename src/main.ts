@@ -172,7 +172,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     get formatSelectors(): Record<MoodlePageFormatType, string[]> {
         const doNotMatchSelector = 'body.do-not-match-any-selector';
         return {
-            plain: [doNotMatchSelector],
+            plain: ['body.format-topics .section.main'],
             grid: ['body.format-grid .grid_section, body.format-grid #gridshadebox'],
             topcoll: ['body.format-topcoll .ctopics.topics .toggledsection'],
             tabs: ['body.format-tabtopics .yui3-tab-panel'],
@@ -748,6 +748,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             'snap',
             'modtab',
             'modtabDivs',
+            'plain',
         ];
 
         if (!supportedFormats.includes(moodleFormat)) {
@@ -808,6 +809,16 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                             const { classList } = m.target as HTMLElement;
                             return classList.contains('active') && classList.contains('show');
                         })[0]?.target as HTMLElement;
+                        break;
+                    case 'plain':
+                        const plainMutationRecord = mutationList[0]; // eslint-disable-line no-case-declarations
+                        if (
+                            plainMutationRecord?.type === 'attributes' &&
+                            plainMutationRecord.attributeName === 'data-locked'
+                        ) {
+                            mutationTarget = plainMutationRecord.target as HTMLElement;
+                        }
+                        debounceTime = 500;
                         break;
                     default:
                         break;
