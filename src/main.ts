@@ -172,7 +172,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     get formatSelectors(): Record<MoodlePageFormatType, string[]> {
         const doNotMatchSelector = 'body.do-not-match-any-selector';
         return {
-            plain: ['body.format-topics .section.main'],
+            plain: ['body.format-topics .section.main .content.collapse'],
             grid: ['body.format-grid .grid_section, body.format-grid #gridshadebox'],
             topcoll: ['body.format-topcoll .ctopics.topics .toggledsection'],
             tabs: ['body.format-tabtopics .yui3-tab-panel'],
@@ -784,8 +784,8 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                     case 'topcoll':
                         mutationTarget = mutationList[0].target as HTMLElement;
                         break;
-                    case 'snap':
-                        const mutationRecord = mutationList[0]; // eslint-disable-line no-case-declarations
+                    case 'snap': {
+                        const mutationRecord = mutationList[0];
                         if (
                             mutationRecord?.type === 'attributes' &&
                             mutationRecord.attributeName === 'class'
@@ -794,6 +794,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                         }
                         debounceTime = 500;
                         break;
+                    }
                     case 'modtab':
                         mutationTarget = mutationList.filter((m) =>
                             (m.target as HTMLElement).classList.contains(
@@ -810,16 +811,16 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                             return classList.contains('active') && classList.contains('show');
                         })[0]?.target as HTMLElement;
                         break;
-                    case 'plain':
-                        const plainMutationRecord = mutationList[0]; // eslint-disable-line no-case-declarations
-                        if (
-                            plainMutationRecord?.type === 'attributes' &&
-                            plainMutationRecord.attributeName === 'data-locked'
-                        ) {
-                            mutationTarget = plainMutationRecord.target as HTMLElement;
-                        }
-                        debounceTime = 500;
+                    case 'plain': {
+                        mutationTarget = mutationList.filter((m) => {
+                            if (m.type !== 'attributes' || m.attributeName !== 'class') {
+                                return false;
+                            }
+                            const { classList } = m.target as HTMLElement;
+                            return classList.contains('collapse');
+                        })[0]?.target as HTMLElement;
                         break;
+                    }
                     default:
                         break;
                 }
