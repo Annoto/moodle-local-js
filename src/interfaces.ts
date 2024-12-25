@@ -42,6 +42,7 @@ export interface IAnnotoMoodleMain {
     readonly isWidgetLoaded: boolean;
     readonly formatSelectors: Record<MoodlePageFormatType, string[]>;
     readonly widgetPlayer: IPlayerParams | undefined;
+    get videojs(): Promise<any>;
     /**
      * Bootstrap or load the widget using annoto api
      * @param container
@@ -49,6 +50,7 @@ export interface IAnnotoMoodleMain {
     bootWidget(container?: HTMLElement | null): Promise<void>;
     destroyWidget(player?: IPlayerParams): Promise<void>;
     findPlayer(container?: HTMLElement | null): IPlayerParams | undefined;
+    findMultiplePlayers(container?: HTMLElement | null): Promise<void>;
     moveApp(container: HTMLElement): void;
     moveAppBackHome(): void;
 }
@@ -143,4 +145,8 @@ export interface IPlayerParams {
     playerType: PlayerType;
     playerId: string;
     playerElement: HTMLElement;
+}
+
+export interface IVideojsPlayer {
+    el_: HTMLElement;
 }

@@ -1,4 +1,4 @@
-import { IAnnotoMoodleMain, IMoodleAnnoto } from 'interfaces';
+import { IAnnotoMoodleMain, IMoodleAnnoto, IPlayerParams, IVideojsPlayer } from 'interfaces';
 import { debounce, delay } from '../util';
 
 const { moodleAnnoto } = window as unknown as { moodleAnnoto: IMoodleAnnoto };
@@ -8,6 +8,7 @@ export class AnnotoMoodleTiles {
     private static main: IAnnotoMoodleMain;
     private static tileOpen = false;
     private static modalOpen = false;
+    private static player: IPlayerParams | undefined;
 
     private static isTileOpen = (): boolean =>
         !!$('body.format-tiles').hasClass('format-tiles-tile-open');
@@ -17,22 +18,14 @@ export class AnnotoMoodleTiles {
             $('body.format-tiles').find('.modal.show').length
         );
 
-    private static mutationHandle = (mutationList?: MutationRecord[]): void => {
-        const isTileOpen = this.isTileOpen();
-        const isModalOpen = this.isModalOpen();
-        if (
-            isTileOpen !== this.tileOpen ||
-            isModalOpen !== this.modalOpen ||
-            !mutationList?.length
-        ) {
-            this.handleStateChange();
-        }
-    };
-
-    private static async handleStateChange(): Promise<void> {
+    private static handleStateChange = async (): Promise<void> => {
         const { main } = this;
         const isModalOpen = this.isModalOpen();
         const isModalChanged = this.modalOpen !== isModalOpen;
+        // If it is the same format and player on the page no need to reboot
+        if (this.modalOpen && !isModalChanged && !this.player?.playerElement?.offsetParent) {
+            return;
+        }
         this.tileOpen = this.isTileOpen();
         this.modalOpen = isModalOpen;
         main.log.info('AnnotoMoodle: tile open state changed: ', this.tileOpen, this.modalOpen);
@@ -52,7 +45,15 @@ export class AnnotoMoodleTiles {
             main.moveAppBackHome();
         }
         const player = main.findPlayer(container);
+        this.player = player;
         if (player?.playerElement?.offsetParent) {
+            const videojs = await main.videojs;
+            const visibleVideojsPlayer = (Object.values(videojs.getPlayers()) as IVideojsPlayer[]).filter(
+                (player) => document.body.contains(player.el_)
+            )[0];
+            if (!visibleVideojsPlayer) {
+                return;
+            }
             main.bootWidget(container);
         } else {
             main.destroyWidget();
@@ -67,9 +68,9 @@ export class AnnotoMoodleTiles {
         const observerNodeTargets = document.querySelectorAll(
             main.formatSelectors.tiles.join(', ')
         );
-
+        
         if (observerNodeTargets.length > 0) {
-            const observer = new MutationObserver(debounce(this.mutationHandle, 300));
+            const observer = new MutationObserver(debounce(this.handleStateChange, 300));
 
             observerNodeTargets.forEach((target) => {
                 observer.observe(target, {
@@ -82,7 +83,7 @@ export class AnnotoMoodleTiles {
 
             if (main.widgetPlayer?.playerElement?.offsetParent) {
                 // will make sure widget is properly loaded or destroyed for detached player element
-                this.mutationHandle();
+                this.handleStateChange();
             }
 
             // failsafe in case of not fired mutation event
