@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.4](https://github.com/Annoto/moodle-local-js/compare/v1.3.3...v1.3.4) (2024-12-25)
+
+
+### Bug Fixes
+
+* widget load and unload for plain format with content in summary section ([#20](https://github.com/Annoto/moodle-local-js/issues/20)) ([546caa6](https://github.com/Annoto/moodle-local-js/commit/546caa63821ec87a1e71a89ba09a55a294117098))
+
 ## [1.3.3](https://github.com/Annoto/moodle-local-js/compare/1.3.3...v1.3.3) (2024-10-06)
 
 
