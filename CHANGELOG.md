@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.5](https://github.com/Annoto/moodle-local-js/compare/v1.3.4...v1.3.5) (2025-08-06)
+
+
+### Bug Fixes
+
+* change not needed warn logs into info ([e43d81b](https://github.com/Annoto/moodle-local-js/commit/e43d81b6c9ea875ac1e4321a6ed00c27c1eacb88))
+
 ## [1.3.4](https://github.com/Annoto/moodle-local-js/compare/v1.3.3...v1.3.4) (2024-12-25)
 
 
