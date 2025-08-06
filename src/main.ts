@@ -87,7 +87,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
 
     setup(params: IMoodleJsParams): void {
         if (this.isSetup) {
-            log.warn('AnnotoMoodle: already setup');
+            log.info('AnnotoMoodle: already setup');
             return;
         }
         log.info('AnnotoMoodle: setup');
@@ -313,12 +313,13 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             return;
         }
         const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
-        log.info('AnnotoMoodle: LTI mod detected: ', !!iframEl);
 
         if (!iframEl) {
-            log.warn('AnnotoMoodle: LTI mod iframe not found');
+            log.info('AnnotoMoodle: LTI mod iframe not found');
             return;
         }
+
+        log.info('AnnotoMoodle: LTI mod detected');
 
         if (!activityCompletionEnabled || !canCompleteActivity) {
             // nothing to do here
@@ -398,12 +399,12 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         }
 
         const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
-        log.info('AnnotoMoodle: Kaltura mod detected: ', !!iframEl);
 
         if (!iframEl) {
-            log.warn('AnnotoMoodle: Kaltura mod iframe not found');
+            log.info('AnnotoMoodle: Kaltura mod iframe not found');
             return;
         }
+        log.info('AnnotoMoodle: Kaltura mod detected');
         const { activityCompletionEnabled } = params;
 
         if (!activityCompletionEnabled || !canCompleteActivity) {
