@@ -350,6 +350,8 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         }
 
         const subscriptionId = `${idPrefix}${iframEl.id}`;
+        const maxSubscribeAttempts = 30; // ~60s at a 2s interval
+        let subscribeAttempts = 0;
         let subscriptionDone = false;
 
         const isTrustedSource = (source: MessageEventSource | null): boolean => {
@@ -400,6 +402,11 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             if (subscriptionDone) {
                 return;
             }
+            if (subscribeAttempts >= maxSubscribeAttempts) {
+                log.warn(`AnnotoMoodle: ${label} gave up subscribing to my_activity`);
+                return;
+            }
+            subscribeAttempts += 1;
             const msg: IFrameMessage<'subscribe'> = {
                 aud: 'annoto_widget',
                 id: subscriptionId,
