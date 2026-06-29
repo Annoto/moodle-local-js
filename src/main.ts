@@ -26,7 +26,7 @@ import {
     KalturaKdpMapType,
     MoodlePageFormatType,
 } from './interfaces';
-import { debounce, generatePlayerId, parseMoodleVersion } from './util';
+import { debounce, escapeHtml, generatePlayerId, parseMoodleVersion } from './util';
 import { AnnotoMoodleTiles } from './formats/tiles';
 
 export { IMoodleJsParams } from './interfaces';
@@ -1051,7 +1051,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                     ...reqDetails.map(
                         (item) => `
                             <span style="padding:0 4px;">
-                                <i class="icon fa fa-${item.icon} fa-fw" aria-hidden="true" style="font-size:16px;"></i> ${item.value}
+                                <i class="icon fa fa-${item.icon} fa-fw" aria-hidden="true" style="font-size:16px;"></i> ${escapeHtml(item.value)}
                             </span>
                         `
                     ),
@@ -1059,11 +1059,11 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             }
         }
         moodleAnnoto.$(completionInfoEl).html(`
-            <div class="automatic-completion-conditions" data-region="completionrequirements" role="list" aria-label="${requirementLabel}">
+            <div class="automatic-completion-conditions" data-region="completionrequirements" role="list" aria-label="${escapeHtml(requirementLabel)}">
                 <span class="badge badge-pill ${
                     isActivityCompleted ? 'alert-success' : 'badge-light'
                 }" role="listitem">
-                    <span><img src="https://cdn.annoto.net/assets/latest/images/icon.svg" aria-hidden="true" style="width:16px;height:auto;"> ${text}</span>
+                    <span><img src="https://cdn.annoto.net/assets/latest/images/icon.svg" aria-hidden="true" style="width:16px;height:auto;"> ${escapeHtml(text)}</span>
                     ${reqDetailsHtml.join('')}
                 </span>
             </div>
