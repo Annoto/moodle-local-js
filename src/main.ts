@@ -219,12 +219,19 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             myActivityResponse,
             params: { activityCompletionReq },
         } = this;
-        return (
-            myActivityResponse ??
-            (activityCompletionReq?.user_data?.data
-                ? JSON.parse(activityCompletionReq.user_data.data)
-                : undefined)
-        );
+        if (myActivityResponse) {
+            return myActivityResponse;
+        }
+        const data = activityCompletionReq?.user_data?.data;
+        if (!data) {
+            return undefined;
+        }
+        try {
+            return JSON.parse(data);
+        } catch (err) {
+            log.error(`AnnotoMoodle: failed to parse my_activity user_data: ${err}`);
+            return undefined;
+        }
     }
 
     get completionInfoEl(): HTMLElement | null {
