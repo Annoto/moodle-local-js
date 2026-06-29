@@ -337,6 +337,11 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         window.addEventListener(
             'message',
             (ev) => {
+                // only trust messages originating from the embedded LTI iframe,
+                // otherwise any window on the page could forge my_activity events.
+                if (ev.source !== iframEl.contentWindow) {
+                    return;
+                }
                 try {
                     const data = JSON.parse(ev.data) as IFrameResponse;
                     if (data.aud !== 'annoto_widget' || data.id !== subscriptionId) {
@@ -423,6 +428,15 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         window.addEventListener(
             'message',
             (ev) => {
+                // only trust messages from the Kaltura iframe or its nested v2 player frame,
+                // otherwise any window on the page could forge my_activity events.
+                const trustedSources: (Window | null | undefined)[] = [
+                    iframEl.contentWindow,
+                    iframEl.contentWindow?.frames?.[0],
+                ];
+                if (!trustedSources.includes(ev.source as Window | null)) {
+                    return;
+                }
                 try {
                     const data = JSON.parse(ev.data) as IFrameResponse;
                     if (data.aud !== 'annoto_widget' || data.id !== subscriptionId) {
