@@ -65,25 +65,8 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     readonly log: typeof log = log;
     myActivityResponse?: IMyActivity;
     trPromise?: Promise<IMoodleTr>;
-    appEl: HTMLElement;
-    appContainer: HTMLElement;
-
-    constructor() {
-        this.appEl = document.createElement('div');
-        this.appEl.id = 'moodle-annoto-app-wrapper';
-        const annotoAppEl = document.createElement('div');
-        annotoAppEl.id = 'annoto-app';
-        this.appEl.appendChild(annotoAppEl);
-        this.appContainer = document.getElementById('page-wrapper') || document.body;
-        this.appContainer.appendChild(this.appEl);
-        const stopPropagation = (ev: UIEvent): void => {
-            ev.stopPropagation();
-        };
-        // contain annoto app click events
-        // fixes modal close on clicks inside the widget
-        $('#annoto-app').on('click', stopPropagation);
-        this.appEl.addEventListener('click', stopPropagation);
-    }
+    appEl!: HTMLElement;
+    appContainer!: HTMLElement;
 
     setup(params: IMoodleJsParams): void {
         if (this.isSetup) {
@@ -94,6 +77,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         this.isSetup = true;
         this.params = params;
 
+        this.initAppElements();
         this.detectFormat();
         const { moodleFormat } = this;
         switch (moodleFormat) {
@@ -117,6 +101,23 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         this.wistiaIframeEmbedInit();
         $(document).ready(this.bootstrap.bind(this));
         this.updateCompletionStatus();
+    }
+
+    initAppElements(): void {
+        this.appEl = document.createElement('div');
+        this.appEl.id = 'moodle-annoto-app-wrapper';
+        const annotoAppEl = document.createElement('div');
+        annotoAppEl.id = 'annoto-app';
+        this.appEl.appendChild(annotoAppEl);
+        this.appContainer = document.getElementById('page-wrapper') || document.body;
+        this.appContainer.appendChild(this.appEl);
+        const stopPropagation = (ev: UIEvent): void => {
+            ev.stopPropagation();
+        };
+        // contain annoto app click events
+        // fixes modal close on clicks inside the widget
+        $('#annoto-app').on('click', stopPropagation);
+        this.appEl.addEventListener('click', stopPropagation);
     }
 
     get hooks(): IHooks {
