@@ -55,7 +55,7 @@ try {
 class AnnotoMoodle implements IAnnotoMoodleMain {
     params!: IMoodleJsParams;
     isSetup = false;
-    bootsrapDone = false;
+    isBootstrapped = false;
     isloaded = false;
     annotoAPI?: IAnnotoApi;
     config!: IConfig;
@@ -547,7 +547,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
      * @returns
      */
     bootstrap(container?: HTMLElement | null): void {
-        if (this.bootsrapDone) {
+        if (this.isBootstrapped) {
             return;
         }
         // FIXME: first search can find wrong player element (ex. modtabDivs) do not boot in this case, wait for mutation
@@ -555,7 +555,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
 
         if (player) {
             log.info('AnnotoMoodle: bootstrap');
-            this.bootsrapDone = true;
+            this.isBootstrapped = true;
             this.config = {
                 ...this.configOverride,
                 widgets: [{ player: {} as IPlayerConfig }],
@@ -621,7 +621,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     async bootWidget(container?: HTMLElement | null): Promise<void> {
-        if (!this.bootsrapDone) {
+        if (!this.isBootstrapped) {
             return this.bootstrap(container);
         }
         return this.loadWidget(container);
@@ -633,7 +633,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
      * @returns
      */
     async loadWidget(container?: HTMLElement | null): Promise<void> {
-        if (!this.bootsrapDone || !this.annotoAPI) {
+        if (!this.isBootstrapped || !this.annotoAPI) {
             return;
         }
         log.info('AnnotoMoodle: load widget');
