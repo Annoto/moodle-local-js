@@ -314,32 +314,58 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     annotoLtiInit(): void {
-        const { moodleFormat, params, canCompleteActivity } = this;
+        if (this.moodleFormat !== 'lti') {
+            return;
+        }
+        this.subscribeToIframeMyActivity({
+            label: 'LTI mod',
+            idPrefix: 'annoto_lti_mod_',
+            includeNestedFrame: false,
+        });
+    }
+
+    /**
+     * Subscribe to my_activity events posted by the Annoto widget running inside
+     * an embedded #contentframe iframe (LTI and Kaltura mods share this flow).
+     */
+    subscribeToIframeMyActivity(options: {
+        label: string;
+        idPrefix: string;
+        includeNestedFrame: boolean;
+    }): void {
+        const { params, canCompleteActivity } = this;
         const { activityCompletionEnabled } = params;
-        if (moodleFormat !== 'lti') {
-            return;
-        }
+        const { label, idPrefix, includeNestedFrame } = options;
+
         const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
-
         if (!iframEl) {
-            log.info('AnnotoMoodle: LTI mod iframe not found');
+            log.info(`AnnotoMoodle: ${label} iframe not found`);
             return;
         }
-
-        log.info('AnnotoMoodle: LTI mod detected');
+        log.info(`AnnotoMoodle: ${label} detected`);
 
         if (!activityCompletionEnabled || !canCompleteActivity) {
             // nothing to do here
             return;
         }
-        const subscriptionId = `annoto_lti_mod_${iframEl.id}`;
+
+        const subscriptionId = `${idPrefix}${iframEl.id}`;
         let subscriptionDone = false;
+
+        const isTrustedSource = (source: MessageEventSource | null): boolean => {
+            // only trust messages from the embedded iframe (or its nested v2 player
+            // frame), otherwise any window on the page could forge my_activity events.
+            const sources: (Window | null | undefined)[] = [iframEl.contentWindow];
+            if (includeNestedFrame) {
+                sources.push(iframEl.contentWindow?.frames?.[0]);
+            }
+            return sources.includes(source as Window | null);
+        };
+
         window.addEventListener(
             'message',
             (ev) => {
-                // only trust messages originating from the embedded LTI iframe,
-                // otherwise any window on the page could forge my_activity events.
-                if (ev.source !== iframEl.contentWindow) {
+                if (!isTrustedSource(ev.source)) {
                     return;
                 }
                 try {
@@ -348,12 +374,12 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                         return;
                     }
                     if (data.err) {
-                        log.error(`AnnotoMoodle: LTI mod iframe API error: ${data.err}`);
+                        log.error(`AnnotoMoodle: ${label} iframe API error: ${data.err}`);
                         return;
                     }
 
                     if (data.type === 'subscribe') {
-                        log.info(`AnnotoMoodle: LTI mod subscribed to my_activity`);
+                        log.info(`AnnotoMoodle: ${label} subscribed to my_activity`);
                         subscriptionDone = true;
                         return;
                     }
@@ -381,8 +407,15 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                 data: 'my_activity',
             };
             try {
+                if (includeNestedFrame) {
+                    // we have no way to know if it's v2 with nested iframe or v7, so send to both
+                    const nestedFrame = iframEl.contentWindow?.frames[0];
+                    if (nestedFrame) {
+                        nestedFrame.postMessage(JSON.stringify(msg), '*');
+                    }
+                }
                 iframEl.contentWindow?.postMessage(JSON.stringify(msg), '*');
-                log.info('AnnotoMoodle: Kaltura mod request subscribeToMyActivity');
+                log.info(`AnnotoMoodle: ${label} request subscribeToMyActivity`);
             } catch (e) {
                 /* empty */
             }
@@ -405,91 +438,14 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     kalturaModInit(): void {
-        const { moodleFormat, params, canCompleteActivity } = this;
-        if (moodleFormat !== 'kalvidres') {
+        if (this.moodleFormat !== 'kalvidres') {
             return;
         }
-
-        const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
-
-        if (!iframEl) {
-            log.info('AnnotoMoodle: Kaltura mod iframe not found');
-            return;
-        }
-        log.info('AnnotoMoodle: Kaltura mod detected');
-        const { activityCompletionEnabled } = params;
-
-        if (!activityCompletionEnabled || !canCompleteActivity) {
-            // nothing to do here
-            return;
-        }
-        const subscriptionId = `annoto_kaltura_mod_${iframEl.id}`;
-        let subscriptionDone = false;
-        window.addEventListener(
-            'message',
-            (ev) => {
-                // only trust messages from the Kaltura iframe or its nested v2 player frame,
-                // otherwise any window on the page could forge my_activity events.
-                const trustedSources: (Window | null | undefined)[] = [
-                    iframEl.contentWindow,
-                    iframEl.contentWindow?.frames?.[0],
-                ];
-                if (!trustedSources.includes(ev.source as Window | null)) {
-                    return;
-                }
-                try {
-                    const data = JSON.parse(ev.data) as IFrameResponse;
-                    if (data.aud !== 'annoto_widget' || data.id !== subscriptionId) {
-                        return;
-                    }
-                    if (data.err) {
-                        log.error(`AnnotoMoodle: Kaltura mod iframe API error: ${data.err}`);
-                        return;
-                    }
-
-                    if (data.type === 'subscribe') {
-                        log.info(`AnnotoMoodle: Kaltura mod subscribed to my_activity`);
-                        subscriptionDone = true;
-                        return;
-                    }
-                    if (data.type === 'event') {
-                        const { data: eventData } = data as IFrameResponse<'event'>;
-                        if (eventData?.eventName === 'my_activity') {
-                            this.myActivityHandle(eventData.eventData as IMyActivity);
-                        }
-                    }
-                } catch (e) {
-                    /* empty */
-                }
-            },
-            false
-        );
-
-        const subscribeToMyActivity = (): void => {
-            if (subscriptionDone) {
-                return;
-            }
-            const msg: IFrameMessage<'subscribe'> = {
-                aud: 'annoto_widget',
-                id: subscriptionId,
-                action: 'subscribe',
-                data: 'my_activity',
-            };
-            try {
-                // we have no way to know if it's v2 with nested iframe of v7, so send to both
-                const v2PlayerFrame = iframEl.contentWindow?.frames[0];
-                if (v2PlayerFrame) {
-                    v2PlayerFrame.postMessage(JSON.stringify(msg), '*');
-                }
-                iframEl.contentWindow?.postMessage(JSON.stringify(msg), '*');
-                log.info('AnnotoMoodle: Kaltura mod request subscribeToMyActivity');
-            } catch (e) {
-                /* empty */
-            }
-            setTimeout(subscribeToMyActivity, 2000);
-        };
-
-        subscribeToMyActivity();
+        this.subscribeToIframeMyActivity({
+            label: 'Kaltura mod',
+            idPrefix: 'annoto_kaltura_mod_',
+            includeNestedFrame: true,
+        });
     }
 
     hasAnnotoTag(): boolean {
