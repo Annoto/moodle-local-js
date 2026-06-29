@@ -26,7 +26,7 @@ import {
     KalturaKdpMapType,
     MoodlePageFormatType,
 } from './interfaces';
-import { debounce, parseMoodleVersion } from './util';
+import { debounce, generatePlayerId, parseMoodleVersion } from './util';
 import { AnnotoMoodleTiles } from './formats/tiles';
 
 export { IMoodleJsParams } from './interfaces';
@@ -507,7 +507,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         }
 
         if (!playerElement.id || playerElement.id === '') {
-            playerElement.id = `annoto_player_id_${Math.random().toString(36).substr(2, 6)}`;
+            playerElement.id = generatePlayerId();
         }
         const playerId = playerElement.id;
 
@@ -933,7 +933,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         const validatePlayerId = (element: Element): void => {
             if (!element.id || element.id === '') {
                 // eslint-disable-next-line no-param-reassign
-                element.id = `annoto_player_id_${Math.random().toString(36).substr(2, 6)}`;
+                element.id = generatePlayerId();
             }
         };
 

@@ -22,6 +22,9 @@ export const debounce = (func: (...args: any[]) => void, wait = 0): ((...args: a
     };
 };
 
+export const generatePlayerId = (): string =>
+    `annoto_player_id_${Math.random().toString(36).slice(2, 8)}`;
+
 export const delay = (ms: number): Promise<void> =>
     new Promise((resolve) => {
         setTimeout(resolve, ms);
