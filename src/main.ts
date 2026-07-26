@@ -16,6 +16,7 @@ import { BUILD_ENV } from './constants';
 import {
     IAnnotoMoodleMain,
     IKalturaKdp,
+    IKalturaV7Player,
     IMoodle,
     IMoodleAnnoto,
     IMoodleCompletionPostResponse,
@@ -24,6 +25,7 @@ import {
     IMoodleTr,
     IPlayerParams,
     KalturaKdpMapType,
+    KalturaV7PlayersMapType,
     MoodlePageFormatType,
 } from './interfaces';
 import { debounce, escapeHtml, generatePlayerId, parseMoodleVersion } from './util';
@@ -98,6 +100,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         }
 
         this.kalturaInit();
+        this.kalturaV7Init();
         this.wistiaIframeEmbedInit();
         $(document).ready(this.bootstrap.bind(this));
         this.updateCompletionStatus();
@@ -689,6 +692,44 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         kdp.player.kBind('annotoPluginReady', this.kalturaPluginReadyHandle.bind(this));
         this.setupKalturaPlugin(kdp.config);
         kdp.doneCb();
+    }
+
+    kalturaV7Init(): void {
+        const maKV7App = moodleAnnoto.kV7App;
+        moodleAnnoto.setupKalturaV7PlayersMap = this.setupKalturaV7PlayersMap.bind(this);
+
+        if (maKV7App) {
+            log.info('AnnotoMoodle: Kaltura V7 loaded on init');
+            this.setupKalturaV7PlayersMap(maKV7App.playersMap);
+        } else {
+            log.info('AnnotoMoodle: Kaltura V7 not loaded on init');
+        }
+    }
+
+    setupKalturaV7PlayersMap(playersMap: KalturaV7PlayersMapType): void {
+        if (!playersMap) {
+            log.info('AnnotoMoodle: skip setup Kaltura V7 players - missing map');
+            return;
+        }
+        log.info('AnnotoMoodle: setup Kaltura V7 players');
+        Object.values(playersMap).forEach((entry) => {
+            this.setupKalturaV7Player(entry);
+        });
+    }
+
+    setupKalturaV7Player(entry: IKalturaV7Player): void {
+        if (!entry.config || entry.setupDone || !entry.doneCb) {
+            log.info(`AnnotoMoodle: skip Kaltura V7 player: ${entry.id}`);
+            return;
+        }
+        log.info(`AnnotoMoodle: setup Kaltura V7 player: ${entry.id}`);
+        entry.setupDone = true; // eslint-disable-line no-param-reassign
+        // Reuse the V2 override helper: injects clientId, backend, hooks, group, locale and
+        // ssoToken. As with V2, the Annoto plugin already set the player type/element - the
+        // override must NOT touch those. SSO is handled via config.ssoToken in the override.
+        this.setupKalturaPlugin(entry.config);
+        // Releasing the boot resolves the onSetup promise with the enriched config.
+        entry.doneCb();
     }
 
     setupKalturaPlugin(config: IConfig): void {

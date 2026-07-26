@@ -31,10 +31,14 @@ export interface IMoodleAnnoto {
     kApp: {
         kdpMap: KalturaKdpMapType;
     }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    kV7App?: {
+        playersMap: KalturaV7PlayersMapType;
+    };
     params: IMoodleJsParams;
     require: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     tr?: IMoodleTr;
     setupKalturaKdpMap?: (kdpMap: KalturaKdpMapType) => void;
+    setupKalturaV7PlayersMap?: (playersMap: KalturaV7PlayersMapType) => void;
 }
 
 export interface IAnnotoMoodleMain {
@@ -58,6 +62,25 @@ export interface IKalturaKdp {
     id: string;
     player: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     config: IConfig;
+    doneCb?: () => void;
+    setupDone?: boolean;
+}
+
+export type KalturaV7PlayersMapType = Record<string, IKalturaV7Player>;
+export interface IKalturaV7Player {
+    id: string;
+    player: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    /**
+     * The Annoto playkit plugin service (player.getService('annoto')).
+     */
+    service: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    /**
+     * Widget config provided by the playkit plugin onSetup hook.
+     */
+    config?: IConfig;
+    /**
+     * Releases the deferred widget boot (resolves the onSetup promise with config).
+     */
     doneCb?: () => void;
     setupDone?: boolean;
 }
