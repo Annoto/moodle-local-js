@@ -469,10 +469,21 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         const h5p = $(parent).find('iframe.h5p-iframe').first().get(0);
         const youtube = $(parent).find('iframe[src*="youtube.com"]').first().get(0);
         const vimeo = $(parent).find('iframe[src*="vimeo.com"]').first().get(0);
-        const videojs = $(parent).find('.video-js').first().get(0);
+        // Exclude elements owned by a Kaltura V7 (playkit) player: the plugin renders an inline
+        // <video> inside `.kaltura-player-container` and auto-boots the Annoto widget itself, so
+        // the generic bootstrap must not detect and double-boot it ("already running" error).
+        const videojs = $(parent)
+            .find('.video-js')
+            .filter((_: number, el: HTMLElement) => !el.closest('.kaltura-player-container'))
+            .first()
+            .get(0);
         const jwplayer = $(parent).find('.jwplayer').first().get(0);
         const wistia = $(parent).find('.wistia_embed:not(iframe)').first().get(0);
-        const html5 = $(parent).find('video').first().get(0);
+        const html5 = $(parent)
+            .find('video')
+            .filter((_: number, el: HTMLElement) => !el.closest('.kaltura-player-container'))
+            .first()
+            .get(0);
         let playerElement: HTMLElement;
         let playerType: PlayerType;
 
