@@ -735,12 +735,40 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         }
         log.info(`AnnotoMoodle: setup Kaltura V7 player: ${entry.id}`);
         entry.setupDone = true; // eslint-disable-line no-param-reassign
-        // Reuse the V2 override helper: injects clientId, backend, hooks, group, locale and
-        // ssoToken. As with V2, the Annoto plugin already set the player type/element - the
-        // override must NOT touch those. SSO is handled via config.ssoToken in the override.
+        // Reuse the V2 override helper: injects clientId, backend, hooks, group and locale.
+        // As with V2, the Annoto plugin already set the player type/element - the override must
+        // NOT touch those.
         this.setupKalturaPlugin(entry.config);
         // Releasing the boot resolves the onSetup promise with the enriched config.
         entry.doneCb();
+        // Explicitly SSO-authenticate once the widget API is ready. config.ssoToken carried by the
+        // override is not reliably applied by the playkit widget on boot, so - mirroring the V2
+        // flow - we call api.auth(userToken) with the Moodle SSO JWT after boot.
+        this.authKalturaV7Player(entry);
+    }
+
+    authKalturaV7Player(entry: IKalturaV7Player): void {
+        const { userToken } = this.params;
+        if (!userToken) {
+            log.info(`AnnotoMoodle: no SSO token, skipping Kaltura V7 auth: ${entry.id}`);
+            return;
+        }
+        if (!entry.service || typeof entry.service.getApi !== 'function') {
+            log.warn(`AnnotoMoodle: Kaltura V7 service has no getApi, cannot SSO: ${entry.id}`);
+            return;
+        }
+        entry.service
+            .getApi()
+            .then((api: IAnnotoApi) => {
+                if (api && typeof api.auth === 'function') {
+                    log.info(`AnnotoMoodle: SSO auth Kaltura V7 player: ${entry.id}`);
+                    return api.auth(userToken);
+                }
+                return undefined;
+            })
+            .catch((err: unknown) => {
+                log.warn(`AnnotoMoodle: Kaltura V7 SSO auth failed: ${entry.id}`, err);
+            });
     }
 
     setupKalturaPlugin(config: IConfig): void {
