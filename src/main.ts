@@ -741,33 +741,48 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         this.setupKalturaPlugin(entry.config);
         // Releasing the boot resolves the onSetup promise with the enriched config.
         entry.doneCb();
-        // Explicitly SSO-authenticate once the widget API is ready. config.ssoToken carried by the
-        // override is not reliably applied by the playkit widget on boot, so - mirroring the V2
-        // flow - we call api.auth(userToken) with the Moodle SSO JWT after boot.
-        this.authKalturaV7Player(entry);
+        // The playkit widget does not reliably apply what the setup-hook config carries (the SSO
+        // token and the group/course context both stay unapplied). So, mirroring the V2 flow, once
+        // the widget API is ready we apply the Moodle-enriched config explicitly: api.load() to
+        // pick up the IGroupDetails group (and the rest of the override), then api.auth() for SSO.
+        this.finalizeKalturaV7Player(entry);
     }
 
-    authKalturaV7Player(entry: IKalturaV7Player): void {
-        const { userToken } = this.params;
-        if (!userToken) {
-            log.info(`AnnotoMoodle: no SSO token, skipping Kaltura V7 auth: ${entry.id}`);
-            return;
-        }
+    finalizeKalturaV7Player(entry: IKalturaV7Player): void {
         if (!entry.service || typeof entry.service.getApi !== 'function') {
-            log.warn(`AnnotoMoodle: Kaltura V7 service has no getApi, cannot SSO: ${entry.id}`);
+            log.warn(`AnnotoMoodle: Kaltura V7 service has no getApi: ${entry.id}`);
             return;
         }
+        const { userToken } = this.params;
         entry.service
             .getApi()
             .then((api: IAnnotoApi) => {
-                if (api && typeof api.auth === 'function') {
-                    log.info(`AnnotoMoodle: SSO auth Kaltura V7 player: ${entry.id}`);
-                    return api.auth(userToken);
+                if (!api) {
+                    return undefined;
                 }
-                return undefined;
+                // Apply the group/course context (and the rest of the enriched config). load() is
+                // the widget API's supported way to (re)apply a configuration; a failure here must
+                // not block SSO, so it is caught locally.
+                const enrichedConfig = entry.config;
+                const applyConfig =
+                    enrichedConfig && typeof api.load === 'function'
+                        ? Promise.resolve(api.load(enrichedConfig)).then(
+                              () => log.info(`AnnotoMoodle: applied group/config Kaltura V7 player: ${entry.id}`),
+                              (err: unknown) =>
+                                  log.warn(`AnnotoMoodle: Kaltura V7 config load failed: ${entry.id}`, err)
+                          )
+                        : Promise.resolve();
+                return applyConfig.then(() => {
+                    if (userToken && typeof api.auth === 'function') {
+                        log.info(`AnnotoMoodle: SSO auth Kaltura V7 player: ${entry.id}`);
+                        return api.auth(userToken);
+                    }
+                    log.info(`AnnotoMoodle: no SSO token, skipping Kaltura V7 auth: ${entry.id}`);
+                    return undefined;
+                });
             })
             .catch((err: unknown) => {
-                log.warn(`AnnotoMoodle: Kaltura V7 SSO auth failed: ${entry.id}`, err);
+                log.warn(`AnnotoMoodle: Kaltura V7 finalize (load/auth) failed: ${entry.id}`, err);
             });
     }
 
