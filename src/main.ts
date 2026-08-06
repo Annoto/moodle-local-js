@@ -741,11 +741,40 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         this.setupKalturaPlugin(entry.config);
         // Releasing the boot resolves the onSetup promise with the enriched config.
         entry.doneCb();
+        // The playkit player renders inline inside Moodle's `.no-overflow` activity wrapper, which
+        // clips the Annoto widget panel that opens beside the video. Unclip it (mirrors what
+        // toggling the class to overflow-visible does by hand).
+        this.fixKalturaV7Overflow(entry);
         // The playkit widget does not reliably apply what the setup-hook config carries (the SSO
         // token and the group/course context both stay unapplied). So, mirroring the V2 flow, once
         // the widget API is ready we apply the Moodle-enriched config explicitly: api.load() to
         // pick up the IGroupDetails group (and the rest of the override), then api.auth() for SSO.
         this.finalizeKalturaV7Player(entry);
+    }
+
+    fixKalturaV7Overflow(entry: IKalturaV7Player): void {
+        try {
+            const playerEl = document.getElementById(entry.id);
+            if (!playerEl) {
+                return;
+            }
+            const unclip = (): void => {
+                // Set overflow:visible on every `.no-overflow` ancestor of the player so the widget
+                // panel is not clipped. Moodle sets overflow:auto on these for wide content.
+                let el: HTMLElement | null = playerEl.closest('.no-overflow');
+                while (el) {
+                    el.style.overflow = 'visible';
+                    el = el.parentElement ? el.parentElement.closest('.no-overflow') : null;
+                }
+            };
+            log.info(`AnnotoMoodle: unclip Kaltura V7 player: ${entry.id}`);
+            unclip();
+            // Moodle re-applies overflow:auto on resize for smaller screens - re-unclip (same
+            // pattern as applyPageScrollFix).
+            $(window).on('resize', debounce(unclip, 500));
+        } catch (err) {
+            log.warn(`AnnotoMoodle: Kaltura V7 overflow fix failed: ${entry.id}`, err);
+        }
     }
 
     finalizeKalturaV7Player(entry: IKalturaV7Player): void {
