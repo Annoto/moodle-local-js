@@ -564,6 +564,15 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         if (this.isBootstrapped) {
             return;
         }
+        // A Kaltura V7 (playkit) player boots the Annoto widget through its own plugin; the generic
+        // bootstrap must never also boot it ("already running" double-boot). The per-element
+        // findPlayer exclusion misses when the media is preloaded (the <video> is present at page
+        // load but not yet inside `.kaltura-player-container` when findPlayer runs), so skip the
+        // whole generic path whenever a playkit player is on the page.
+        if (document.querySelector('.kaltura-player-container')) {
+            log.info('AnnotoMoodle: bootstrap skipped - Kaltura V7 player present');
+            return;
+        }
         // FIXME: first search can find wrong player element (ex. modtabDivs) do not boot in this case, wait for mutation
         const player = this.findPlayer(container);
 
@@ -754,13 +763,15 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
 
     fixKalturaV7Overflow(entry: IKalturaV7Player): void {
         try {
-            const playerEl = document.getElementById(entry.id);
-            if (!playerEl) {
-                return;
-            }
             const unclip = (): void => {
                 // Set overflow:visible on every `.no-overflow` ancestor of the player so the widget
-                // panel is not clipped. Moodle sets overflow:auto on these for wide content.
+                // panel is not clipped. Moodle sets overflow:auto on these for wide content. Re-query
+                // the player element each time - on the page-load path the DOM may not be ready on
+                // the first pass.
+                const playerEl = document.getElementById(entry.id);
+                if (!playerEl) {
+                    return;
+                }
                 let el: HTMLElement | null = playerEl.closest('.no-overflow');
                 while (el) {
                     el.style.overflow = 'visible';
@@ -769,8 +780,11 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             };
             log.info(`AnnotoMoodle: unclip Kaltura V7 player: ${entry.id}`);
             unclip();
-            // Moodle re-applies overflow:auto on resize for smaller screens - re-unclip (same
-            // pattern as applyPageScrollFix).
+            // Re-apply after the page settles: on the page-load path Moodle's own layout JS can
+            // (re)set overflow:auto on .no-overflow after our first pass, and the container may not
+            // exist yet on the very first tick.
+            [400, 1000, 2000, 4000].forEach((t) => setTimeout(unclip, t));
+            // Moodle also re-applies overflow:auto on resize for smaller screens.
             $(window).on('resize', debounce(unclip, 500));
         } catch (err) {
             log.warn(`AnnotoMoodle: Kaltura V7 overflow fix failed: ${entry.id}`, err);
