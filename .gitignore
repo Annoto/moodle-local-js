@@ -43,3 +43,7 @@ jspm_packages
 .idea
 
 dist/
+
+# Local dev TLS certificates (mkcert) - never commit, contain private keys
+certs/
+*.pem
