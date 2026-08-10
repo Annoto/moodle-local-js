@@ -8,6 +8,8 @@ export class AnnotoMoodleTiles {
     private static main: IAnnotoMoodleMain;
     private static tileOpen = false;
     private static modalOpen = false;
+    private static observer?: MutationObserver;
+    private static failsafeTimer?: ReturnType<typeof setInterval>;
 
     private static isTileOpen = (): boolean =>
         !!$('body.format-tiles').hasClass('format-tiles-tile-open');
@@ -69,10 +71,10 @@ export class AnnotoMoodleTiles {
         );
 
         if (observerNodeTargets.length > 0) {
-            const observer = new MutationObserver(debounce(this.mutationHandle, 300));
+            this.observer = new MutationObserver(debounce(this.mutationHandle, 300));
 
             observerNodeTargets.forEach((target) => {
-                observer.observe(target, {
+                this.observer?.observe(target, {
                     attributes: true,
                     childList: false,
                     subtree: false,
@@ -86,11 +88,20 @@ export class AnnotoMoodleTiles {
             }
 
             // failsafe in case of not fired mutation event
-            setInterval(() => {
+            this.failsafeTimer = setInterval(() => {
                 if (this.isTileOpen() !== this.tileOpen || this.isModalOpen() !== this.modalOpen) {
                     this.handleStateChange();
                 }
             }, 1000);
+        }
+    }
+
+    static destroy(): void {
+        this.observer?.disconnect();
+        this.observer = undefined;
+        if (this.failsafeTimer !== undefined) {
+            clearInterval(this.failsafeTimer);
+            this.failsafeTimer = undefined;
         }
     }
 }

@@ -16,6 +16,7 @@ import { BUILD_ENV } from './constants';
 import {
     IAnnotoMoodleMain,
     IKalturaKdp,
+    IKalturaV7Player,
     IMoodle,
     IMoodleAnnoto,
     IMoodleCompletionPostResponse,
@@ -24,9 +25,10 @@ import {
     IMoodleTr,
     IPlayerParams,
     KalturaKdpMapType,
+    KalturaV7PlayersMapType,
     MoodlePageFormatType,
 } from './interfaces';
-import { debounce, parseMoodleVersion } from './util';
+import { debounce, escapeHtml, generatePlayerId, parseMoodleVersion } from './util';
 import { AnnotoMoodleTiles } from './formats/tiles';
 
 export { IMoodleJsParams } from './interfaces';
@@ -55,7 +57,7 @@ try {
 class AnnotoMoodle implements IAnnotoMoodleMain {
     params!: IMoodleJsParams;
     isSetup = false;
-    bootsrapDone = false;
+    isBootstrapped = false;
     isloaded = false;
     annotoAPI?: IAnnotoApi;
     config!: IConfig;
@@ -65,25 +67,8 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     readonly log: typeof log = log;
     myActivityResponse?: IMyActivity;
     trPromise?: Promise<IMoodleTr>;
-    appEl: HTMLElement;
-    appContainer: HTMLElement;
-
-    constructor() {
-        this.appEl = document.createElement('div');
-        this.appEl.id = 'moodle-annoto-app-wrapper';
-        const annotoAppEl = document.createElement('div');
-        annotoAppEl.id = 'annoto-app';
-        this.appEl.appendChild(annotoAppEl);
-        this.appContainer = document.getElementById('page-wrapper') || document.body;
-        this.appContainer.appendChild(this.appEl);
-        const stopPropagation = (ev: UIEvent): void => {
-            ev.stopPropagation();
-        };
-        // contain annoto app click events
-        // fixes modal close on clicks inside the widget
-        $('#annoto-app').on('click', stopPropagation);
-        this.appEl.addEventListener('click', stopPropagation);
-    }
+    appEl!: HTMLElement;
+    appContainer!: HTMLElement;
 
     setup(params: IMoodleJsParams): void {
         if (this.isSetup) {
@@ -94,6 +79,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         this.isSetup = true;
         this.params = params;
 
+        this.initAppElements();
         this.detectFormat();
         const { moodleFormat } = this;
         switch (moodleFormat) {
@@ -114,9 +100,27 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         }
 
         this.kalturaInit();
+        this.kalturaV7Init();
         this.wistiaIframeEmbedInit();
         $(document).ready(this.bootstrap.bind(this));
         this.updateCompletionStatus();
+    }
+
+    initAppElements(): void {
+        this.appEl = document.createElement('div');
+        this.appEl.id = 'moodle-annoto-app-wrapper';
+        const annotoAppEl = document.createElement('div');
+        annotoAppEl.id = 'annoto-app';
+        this.appEl.appendChild(annotoAppEl);
+        this.appContainer = document.getElementById('page-wrapper') || document.body;
+        this.appContainer.appendChild(this.appEl);
+        const stopPropagation = (ev: UIEvent): void => {
+            ev.stopPropagation();
+        };
+        // contain annoto app click events
+        // fixes modal close on clicks inside the widget
+        $('#annoto-app').on('click', stopPropagation);
+        this.appEl.addEventListener('click', stopPropagation);
     }
 
     get hooks(): IHooks {
@@ -219,12 +223,19 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             myActivityResponse,
             params: { activityCompletionReq },
         } = this;
-        return (
-            myActivityResponse ??
-            (activityCompletionReq?.user_data?.data
-                ? JSON.parse(activityCompletionReq.user_data.data)
-                : undefined)
-        );
+        if (myActivityResponse) {
+            return myActivityResponse;
+        }
+        const data = activityCompletionReq?.user_data?.data;
+        if (!data) {
+            return undefined;
+        }
+        try {
+            return JSON.parse(data);
+        } catch (err) {
+            log.error(`AnnotoMoodle: failed to parse my_activity user_data: ${err}`);
+            return undefined;
+        }
     }
 
     get completionInfoEl(): HTMLElement | null {
@@ -307,41 +318,74 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     annotoLtiInit(): void {
-        const { moodleFormat, params, canCompleteActivity } = this;
+        if (this.moodleFormat !== 'lti') {
+            return;
+        }
+        this.subscribeToIframeMyActivity({
+            label: 'LTI mod',
+            idPrefix: 'annoto_lti_mod_',
+            includeNestedFrame: false,
+        });
+    }
+
+    /**
+     * Subscribe to my_activity events posted by the Annoto widget running inside
+     * an embedded #contentframe iframe (LTI and Kaltura mods share this flow).
+     */
+    subscribeToIframeMyActivity(options: {
+        label: string;
+        idPrefix: string;
+        includeNestedFrame: boolean;
+    }): void {
+        const { params, canCompleteActivity } = this;
         const { activityCompletionEnabled } = params;
-        if (moodleFormat !== 'lti') {
-            return;
-        }
+        const { label, idPrefix, includeNestedFrame } = options;
+
         const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
-
         if (!iframEl) {
-            log.info('AnnotoMoodle: LTI mod iframe not found');
+            log.info(`AnnotoMoodle: ${label} iframe not found`);
             return;
         }
-
-        log.info('AnnotoMoodle: LTI mod detected');
+        log.info(`AnnotoMoodle: ${label} detected`);
 
         if (!activityCompletionEnabled || !canCompleteActivity) {
             // nothing to do here
             return;
         }
-        const subscriptionId = `annoto_lti_mod_${iframEl.id}`;
+
+        const subscriptionId = `${idPrefix}${iframEl.id}`;
+        const maxSubscribeAttempts = 30; // ~60s at a 2s interval
+        let subscribeAttempts = 0;
         let subscriptionDone = false;
+
+        const isTrustedSource = (source: MessageEventSource | null): boolean => {
+            // only trust messages from the embedded iframe (or its nested v2 player
+            // frame), otherwise any window on the page could forge my_activity events.
+            const sources: (Window | null | undefined)[] = [iframEl.contentWindow];
+            if (includeNestedFrame) {
+                sources.push(iframEl.contentWindow?.frames?.[0]);
+            }
+            return sources.includes(source as Window | null);
+        };
+
         window.addEventListener(
             'message',
             (ev) => {
+                if (!isTrustedSource(ev.source)) {
+                    return;
+                }
                 try {
                     const data = JSON.parse(ev.data) as IFrameResponse;
                     if (data.aud !== 'annoto_widget' || data.id !== subscriptionId) {
                         return;
                     }
                     if (data.err) {
-                        log.error(`AnnotoMoodle: LTI mod iframe API error: ${data.err}`);
+                        log.error(`AnnotoMoodle: ${label} iframe API error: ${data.err}`);
                         return;
                     }
 
                     if (data.type === 'subscribe') {
-                        log.info(`AnnotoMoodle: LTI mod subscribed to my_activity`);
+                        log.info(`AnnotoMoodle: ${label} subscribed to my_activity`);
                         subscriptionDone = true;
                         return;
                     }
@@ -362,6 +406,11 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             if (subscriptionDone) {
                 return;
             }
+            if (subscribeAttempts >= maxSubscribeAttempts) {
+                log.warn(`AnnotoMoodle: ${label} gave up subscribing to my_activity`);
+                return;
+            }
+            subscribeAttempts += 1;
             const msg: IFrameMessage<'subscribe'> = {
                 aud: 'annoto_widget',
                 id: subscriptionId,
@@ -369,8 +418,15 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                 data: 'my_activity',
             };
             try {
+                if (includeNestedFrame) {
+                    // we have no way to know if it's v2 with nested iframe or v7, so send to both
+                    const nestedFrame = iframEl.contentWindow?.frames[0];
+                    if (nestedFrame) {
+                        nestedFrame.postMessage(JSON.stringify(msg), '*');
+                    }
+                }
                 iframEl.contentWindow?.postMessage(JSON.stringify(msg), '*');
-                log.info('AnnotoMoodle: Kaltura mod request subscribeToMyActivity');
+                log.info(`AnnotoMoodle: ${label} request subscribeToMyActivity`);
             } catch (e) {
                 /* empty */
             }
@@ -393,82 +449,14 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     kalturaModInit(): void {
-        const { moodleFormat, params, canCompleteActivity } = this;
-        if (moodleFormat !== 'kalvidres') {
+        if (this.moodleFormat !== 'kalvidres') {
             return;
         }
-
-        const iframEl = document.querySelector('#contentframe') as HTMLIFrameElement;
-
-        if (!iframEl) {
-            log.info('AnnotoMoodle: Kaltura mod iframe not found');
-            return;
-        }
-        log.info('AnnotoMoodle: Kaltura mod detected');
-        const { activityCompletionEnabled } = params;
-
-        if (!activityCompletionEnabled || !canCompleteActivity) {
-            // nothing to do here
-            return;
-        }
-        const subscriptionId = `annoto_kaltura_mod_${iframEl.id}`;
-        let subscriptionDone = false;
-        window.addEventListener(
-            'message',
-            (ev) => {
-                try {
-                    const data = JSON.parse(ev.data) as IFrameResponse;
-                    if (data.aud !== 'annoto_widget' || data.id !== subscriptionId) {
-                        return;
-                    }
-                    if (data.err) {
-                        log.error(`AnnotoMoodle: Kaltura mod iframe API error: ${data.err}`);
-                        return;
-                    }
-
-                    if (data.type === 'subscribe') {
-                        log.info(`AnnotoMoodle: Kaltura mod subscribed to my_activity`);
-                        subscriptionDone = true;
-                        return;
-                    }
-                    if (data.type === 'event') {
-                        const { data: eventData } = data as IFrameResponse<'event'>;
-                        if (eventData?.eventName === 'my_activity') {
-                            this.myActivityHandle(eventData.eventData as IMyActivity);
-                        }
-                    }
-                } catch (e) {
-                    /* empty */
-                }
-            },
-            false
-        );
-
-        const subscribeToMyActivity = (): void => {
-            if (subscriptionDone) {
-                return;
-            }
-            const msg: IFrameMessage<'subscribe'> = {
-                aud: 'annoto_widget',
-                id: subscriptionId,
-                action: 'subscribe',
-                data: 'my_activity',
-            };
-            try {
-                // we have no way to know if it's v2 with nested iframe of v7, so send to both
-                const v2PlayerFrame = iframEl.contentWindow?.frames[0];
-                if (v2PlayerFrame) {
-                    v2PlayerFrame.postMessage(JSON.stringify(msg), '*');
-                }
-                iframEl.contentWindow?.postMessage(JSON.stringify(msg), '*');
-                log.info('AnnotoMoodle: Kaltura mod request subscribeToMyActivity');
-            } catch (e) {
-                /* empty */
-            }
-            setTimeout(subscribeToMyActivity, 2000);
-        };
-
-        subscribeToMyActivity();
+        this.subscribeToIframeMyActivity({
+            label: 'Kaltura mod',
+            idPrefix: 'annoto_kaltura_mod_',
+            includeNestedFrame: true,
+        });
     }
 
     hasAnnotoTag(): boolean {
@@ -481,10 +469,21 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         const h5p = $(parent).find('iframe.h5p-iframe').first().get(0);
         const youtube = $(parent).find('iframe[src*="youtube.com"]').first().get(0);
         const vimeo = $(parent).find('iframe[src*="vimeo.com"]').first().get(0);
-        const videojs = $(parent).find('.video-js').first().get(0);
+        // Exclude elements owned by a Kaltura V7 (playkit) player: the plugin renders an inline
+        // <video> inside `.kaltura-player-container` and auto-boots the Annoto widget itself, so
+        // the generic bootstrap must not detect and double-boot it ("already running" error).
+        const videojs = $(parent)
+            .find('.video-js')
+            .filter((_: number, el: HTMLElement) => !el.closest('.kaltura-player-container'))
+            .first()
+            .get(0);
         const jwplayer = $(parent).find('.jwplayer').first().get(0);
         const wistia = $(parent).find('.wistia_embed:not(iframe)').first().get(0);
-        const html5 = $(parent).find('video').first().get(0);
+        const html5 = $(parent)
+            .find('video')
+            .filter((_: number, el: HTMLElement) => !el.closest('.kaltura-player-container'))
+            .first()
+            .get(0);
         let playerElement: HTMLElement;
         let playerType: PlayerType;
 
@@ -522,7 +521,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         }
 
         if (!playerElement.id || playerElement.id === '') {
-            playerElement.id = `annoto_player_id_${Math.random().toString(36).substr(2, 6)}`;
+            playerElement.id = generatePlayerId();
         }
         const playerId = playerElement.id;
 
@@ -562,7 +561,16 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
      * @returns
      */
     bootstrap(container?: HTMLElement | null): void {
-        if (this.bootsrapDone) {
+        if (this.isBootstrapped) {
+            return;
+        }
+        // A Kaltura V7 (playkit) player boots the Annoto widget through its own plugin; the generic
+        // bootstrap must never also boot it ("already running" double-boot). The per-element
+        // findPlayer exclusion misses when the media is preloaded (the <video> is present at page
+        // load but not yet inside `.kaltura-player-container` when findPlayer runs), so skip the
+        // whole generic path whenever a playkit player is on the page.
+        if (document.querySelector('.kaltura-player-container')) {
+            log.info('AnnotoMoodle: bootstrap skipped - Kaltura V7 player present');
             return;
         }
         // FIXME: first search can find wrong player element (ex. modtabDivs) do not boot in this case, wait for mutation
@@ -570,7 +578,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
 
         if (player) {
             log.info('AnnotoMoodle: bootstrap');
-            this.bootsrapDone = true;
+            this.isBootstrapped = true;
             this.config = {
                 ...this.configOverride,
                 widgets: [{ player: {} as IPlayerConfig }],
@@ -636,7 +644,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     async bootWidget(container?: HTMLElement | null): Promise<void> {
-        if (!this.bootsrapDone) {
+        if (!this.isBootstrapped) {
             return this.bootstrap(container);
         }
         return this.loadWidget(container);
@@ -648,7 +656,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
      * @returns
      */
     async loadWidget(container?: HTMLElement | null): Promise<void> {
-        if (!this.bootsrapDone || !this.annotoAPI) {
+        if (!this.isBootstrapped || !this.annotoAPI) {
             return;
         }
         log.info('AnnotoMoodle: load widget');
@@ -704,6 +712,121 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         kdp.player.kBind('annotoPluginReady', this.kalturaPluginReadyHandle.bind(this));
         this.setupKalturaPlugin(kdp.config);
         kdp.doneCb();
+    }
+
+    kalturaV7Init(): void {
+        const maKV7App = moodleAnnoto.kV7App;
+        moodleAnnoto.setupKalturaV7PlayersMap = this.setupKalturaV7PlayersMap.bind(this);
+
+        if (maKV7App) {
+            log.info('AnnotoMoodle: Kaltura V7 loaded on init');
+            this.setupKalturaV7PlayersMap(maKV7App.playersMap);
+        } else {
+            log.info('AnnotoMoodle: Kaltura V7 not loaded on init');
+        }
+    }
+
+    setupKalturaV7PlayersMap(playersMap: KalturaV7PlayersMapType): void {
+        if (!playersMap) {
+            log.info('AnnotoMoodle: skip setup Kaltura V7 players - missing map');
+            return;
+        }
+        log.info('AnnotoMoodle: setup Kaltura V7 players');
+        Object.values(playersMap).forEach((entry) => {
+            this.setupKalturaV7Player(entry);
+        });
+    }
+
+    setupKalturaV7Player(entry: IKalturaV7Player): void {
+        if (!entry.config || entry.setupDone || !entry.doneCb) {
+            log.info(`AnnotoMoodle: skip Kaltura V7 player: ${entry.id}`);
+            return;
+        }
+        log.info(`AnnotoMoodle: setup Kaltura V7 player: ${entry.id}`);
+        entry.setupDone = true; // eslint-disable-line no-param-reassign
+        // Reuse the V2 override helper: injects clientId, backend, hooks, group and locale.
+        // As with V2, the Annoto plugin already set the player type/element - the override must
+        // NOT touch those.
+        this.setupKalturaPlugin(entry.config);
+        // Releasing the boot resolves the onSetup promise with the enriched config.
+        entry.doneCb();
+        // The playkit player renders inline inside Moodle's `.no-overflow` activity wrapper, which
+        // clips the Annoto widget panel that opens beside the video. Unclip it (mirrors what
+        // toggling the class to overflow-visible does by hand).
+        this.fixKalturaV7Overflow(entry);
+        // The playkit widget does not reliably apply what the setup-hook config carries (the SSO
+        // token and the group/course context both stay unapplied). So, mirroring the V2 flow, once
+        // the widget API is ready we apply the Moodle-enriched config explicitly: api.load() to
+        // pick up the IGroupDetails group (and the rest of the override), then api.auth() for SSO.
+        this.finalizeKalturaV7Player(entry);
+    }
+
+    fixKalturaV7Overflow(entry: IKalturaV7Player): void {
+        try {
+            const unclip = (): void => {
+                // Set overflow:visible on every `.no-overflow` ancestor of the player so the widget
+                // panel is not clipped. Moodle sets overflow:auto on these for wide content. Re-query
+                // the player element each time - on the page-load path the DOM may not be ready on
+                // the first pass.
+                const playerEl = document.getElementById(entry.id);
+                if (!playerEl) {
+                    return;
+                }
+                let el: HTMLElement | null = playerEl.closest('.no-overflow');
+                while (el) {
+                    el.style.overflow = 'visible';
+                    el = el.parentElement ? el.parentElement.closest('.no-overflow') : null;
+                }
+            };
+            log.info(`AnnotoMoodle: unclip Kaltura V7 player: ${entry.id}`);
+            unclip();
+            // Re-apply after the page settles: on the page-load path Moodle's own layout JS can
+            // (re)set overflow:auto on .no-overflow after our first pass, and the container may not
+            // exist yet on the very first tick.
+            [400, 1000, 2000, 4000].forEach((t) => setTimeout(unclip, t));
+            // Moodle also re-applies overflow:auto on resize for smaller screens.
+            $(window).on('resize', debounce(unclip, 500));
+        } catch (err) {
+            log.warn(`AnnotoMoodle: Kaltura V7 overflow fix failed: ${entry.id}`, err);
+        }
+    }
+
+    finalizeKalturaV7Player(entry: IKalturaV7Player): void {
+        if (!entry.service || typeof entry.service.getApi !== 'function') {
+            log.warn(`AnnotoMoodle: Kaltura V7 service has no getApi: ${entry.id}`);
+            return;
+        }
+        const { userToken } = this.params;
+        entry.service
+            .getApi()
+            .then((api: IAnnotoApi) => {
+                if (!api) {
+                    return undefined;
+                }
+                // Apply the group/course context (and the rest of the enriched config). load() is
+                // the widget API's supported way to (re)apply a configuration; a failure here must
+                // not block SSO, so it is caught locally.
+                const enrichedConfig = entry.config;
+                const applyConfig =
+                    enrichedConfig && typeof api.load === 'function'
+                        ? Promise.resolve(api.load(enrichedConfig)).then(
+                              () => log.info(`AnnotoMoodle: applied group/config Kaltura V7 player: ${entry.id}`),
+                              (err: unknown) =>
+                                  log.warn(`AnnotoMoodle: Kaltura V7 config load failed: ${entry.id}`, err)
+                          )
+                        : Promise.resolve();
+                return applyConfig.then(() => {
+                    if (userToken && typeof api.auth === 'function') {
+                        log.info(`AnnotoMoodle: SSO auth Kaltura V7 player: ${entry.id}`);
+                        return api.auth(userToken);
+                    }
+                    log.info(`AnnotoMoodle: no SSO token, skipping Kaltura V7 auth: ${entry.id}`);
+                    return undefined;
+                });
+            })
+            .catch((err: unknown) => {
+                log.warn(`AnnotoMoodle: Kaltura V7 finalize (load/auth) failed: ${entry.id}`, err);
+            });
     }
 
     setupKalturaPlugin(config: IConfig): void {
@@ -948,7 +1071,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         const validatePlayerId = (element: Element): void => {
             if (!element.id || element.id === '') {
                 // eslint-disable-next-line no-param-reassign
-                element.id = `annoto_player_id_${Math.random().toString(36).substr(2, 6)}`;
+                element.id = generatePlayerId();
             }
         };
 
@@ -1066,7 +1189,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                     ...reqDetails.map(
                         (item) => `
                             <span style="padding:0 4px;">
-                                <i class="icon fa fa-${item.icon} fa-fw" aria-hidden="true" style="font-size:16px;"></i> ${item.value}
+                                <i class="icon fa fa-${item.icon} fa-fw" aria-hidden="true" style="font-size:16px;"></i> ${escapeHtml(item.value)}
                             </span>
                         `
                     ),
@@ -1074,11 +1197,11 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             }
         }
         moodleAnnoto.$(completionInfoEl).html(`
-            <div class="automatic-completion-conditions" data-region="completionrequirements" role="list" aria-label="${requirementLabel}">
+            <div class="automatic-completion-conditions" data-region="completionrequirements" role="list" aria-label="${escapeHtml(requirementLabel)}">
                 <span class="badge badge-pill ${
                     isActivityCompleted ? 'alert-success' : 'badge-light'
                 }" role="listitem">
-                    <span><img src="https://cdn.annoto.net/assets/latest/images/icon.svg" aria-hidden="true" style="width:16px;height:auto;"> ${text}</span>
+                    <span><img src="https://cdn.annoto.net/assets/latest/images/icon.svg" aria-hidden="true" style="width:16px;height:auto;"> ${escapeHtml(text)}</span>
                     ${reqDetailsHtml.join('')}
                 </span>
             </div>
