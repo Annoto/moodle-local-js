@@ -34,11 +34,6 @@ export interface IMoodleAnnoto {
     kV7App?: {
         playersMap: KalturaV7PlayersMapType;
     };
-    /**
-     * Set by plugin versions that handle Kaltura V7 (playkit) players. When absent (older plugin),
-     * the bundle keeps the pre-V7 behaviour so it stays backward compatible.
-     */
-    kalturaV7?: boolean;
     params: IMoodleJsParams;
     require: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     tr?: IMoodleTr;
