@@ -576,15 +576,11 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         }
         // With a V7-capable plugin (moodleAnnoto.kalturaV7): a Kaltura V7 (playkit) player boots the
         // Annoto widget through its own plugin, so the generic bootstrap must never also boot it
-        // ("already running" double-boot). We detect the page via `window.KalturaPlayer`, which the
-        // Kaltura embed sets as soon as it loads - much earlier than the `.kaltura-player-container`
-        // wrapper is stamped, so this doesn't miss when bootstrap() runs on $(document).ready before
-        // the player finishes setting up. Gated on the flag so older plugins are unaffected.
-        if (
-            moodleAnnoto.kalturaV7 &&
-            ((window as unknown as { KalturaPlayer?: unknown }).KalturaPlayer ||
-                document.querySelector('.kaltura-player-container'))
-        ) {
+        // ("already running" double-boot). The per-element findPlayer exclusion misses when the
+        // media is preloaded (the <video> is present at page load but not yet inside
+        // `.kaltura-player-container` when findPlayer runs), so skip the whole generic path whenever
+        // a playkit player is on the page. Gated on the flag so older plugins are unaffected.
+        if (moodleAnnoto.kalturaV7 && document.querySelector('.kaltura-player-container')) {
             log.info('AnnotoMoodle: bootstrap skipped - Kaltura V7 player present');
             return;
         }
