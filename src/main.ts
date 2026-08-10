@@ -469,19 +469,23 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         const h5p = $(parent).find('iframe.h5p-iframe').first().get(0);
         const youtube = $(parent).find('iframe[src*="youtube.com"]').first().get(0);
         const vimeo = $(parent).find('iframe[src*="vimeo.com"]').first().get(0);
-        // Exclude elements owned by a Kaltura V7 (playkit) player: the plugin renders an inline
-        // <video> inside `.kaltura-player-container` and auto-boots the Annoto widget itself, so
-        // the generic bootstrap must not detect and double-boot it ("already running" error).
+        // Only when a V7-capable plugin is present (moodleAnnoto.kalturaV7): exclude elements owned
+        // by a Kaltura V7 (playkit) player - the plugin renders an inline <video> inside
+        // `.kaltura-player-container` and boots the Annoto widget itself, so the generic bootstrap
+        // must not detect and double-boot it. On an older plugin this exclusion is OFF so the
+        // generic bootstrap keeps booting on Kaltura videos exactly as before (backward compat).
+        const excludeV7 = (el: HTMLElement): boolean =>
+            !!moodleAnnoto.kalturaV7 && !!el.closest('.kaltura-player-container');
         const videojs = $(parent)
             .find('.video-js')
-            .filter((_: number, el: HTMLElement) => !el.closest('.kaltura-player-container'))
+            .filter((_: number, el: HTMLElement) => !excludeV7(el))
             .first()
             .get(0);
         const jwplayer = $(parent).find('.jwplayer').first().get(0);
         const wistia = $(parent).find('.wistia_embed:not(iframe)').first().get(0);
         const html5 = $(parent)
             .find('video')
-            .filter((_: number, el: HTMLElement) => !el.closest('.kaltura-player-container'))
+            .filter((_: number, el: HTMLElement) => !excludeV7(el))
             .first()
             .get(0);
         let playerElement: HTMLElement;
@@ -564,12 +568,13 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         if (this.isBootstrapped) {
             return;
         }
-        // A Kaltura V7 (playkit) player boots the Annoto widget through its own plugin; the generic
-        // bootstrap must never also boot it ("already running" double-boot). The per-element
-        // findPlayer exclusion misses when the media is preloaded (the <video> is present at page
-        // load but not yet inside `.kaltura-player-container` when findPlayer runs), so skip the
-        // whole generic path whenever a playkit player is on the page.
-        if (document.querySelector('.kaltura-player-container')) {
+        // With a V7-capable plugin (moodleAnnoto.kalturaV7): a Kaltura V7 (playkit) player boots the
+        // Annoto widget through its own plugin, so the generic bootstrap must never also boot it
+        // ("already running" double-boot). The per-element findPlayer exclusion misses when the
+        // media is preloaded (the <video> is present at page load but not yet inside
+        // `.kaltura-player-container` when findPlayer runs), so skip the whole generic path whenever
+        // a playkit player is on the page. Gated on the flag so older plugins are unaffected.
+        if (moodleAnnoto.kalturaV7 && document.querySelector('.kaltura-player-container')) {
             log.info('AnnotoMoodle: bootstrap skipped - Kaltura V7 player present');
             return;
         }
