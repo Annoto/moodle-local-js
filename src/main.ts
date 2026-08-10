@@ -354,12 +354,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         }
 
         const subscriptionId = `${idPrefix}${iframEl.id}`;
-        // Retry with back-off (2s growing to a 30s ceiling) up to ~1h, so a slow-loading or
-        // click-to-play embed (student presses play minutes later) still subscribes to my_activity,
-        // without a tight forever-loop.
-        const maxSubscribeAttempts = 120;
-        const maxSubscribeDelay = 30000;
-        let subscribeDelay = 2000;
+        const maxSubscribeAttempts = 30; // ~60s at a 2s interval
         let subscribeAttempts = 0;
         let subscriptionDone = false;
 
@@ -435,8 +430,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             } catch (e) {
                 /* empty */
             }
-            setTimeout(subscribeToMyActivity, subscribeDelay);
-            subscribeDelay = Math.min(subscribeDelay * 2, maxSubscribeDelay);
+            setTimeout(subscribeToMyActivity, 2000);
         };
 
         subscribeToMyActivity();
