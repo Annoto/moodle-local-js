@@ -21,15 +21,16 @@
     "dev": "webpack serve --env envName=dev",
     "watch": "webpack --progress --color --watch --env envName=dev",
     "lint": "eslint \"src/**/*.ts\" --color",
+    "test:kaltura-v7": "node test/kaltura-v7-plugin-contract.js",
     "prettier:fix": "prettier --write ."
   },
   "dependencies": {
     "@annoto/widget-api": "^3.35.0"
   },
   "devDependencies": {
-    "@types/webpack": "^5.28.5",
     "@types/jquery": "^3.5.29",
     "@types/node": "^18.11.18",
+    "@types/webpack": "^5.28.5",
     "@typescript-eslint/eslint-plugin": "^6.16.0",
     "@typescript-eslint/parser": "^6.16.0",
     "eslint": "^8.56.0",
@@ -39,6 +40,7 @@
     "eslint-plugin-only-warn": "^1.1.0",
     "eslint-plugin-sort-class-members": "^1.19.0",
     "eslint-webpack-plugin": "^4.0.1",
+    "jsdom": "^30.0.1",
     "prettier": "^3.1.1",
     "ts-loader": "^9.5.1",
     "typescript": "^5.3.3",

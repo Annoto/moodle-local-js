@@ -83,6 +83,16 @@ export interface IKalturaV7Player {
      */
     doneCb?: () => void;
     setupDone?: boolean;
+    /**
+     * Set once the widget API has been asked for (api.load/api.auth), so that pass runs at most
+     * once per player even though the entry can be handed to the bundle more than once.
+     */
+    finalizeDone?: boolean;
+    /**
+     * Set once the .no-overflow unclip has been installed, so its timers and resize handler are
+     * not attached again on a second hand-over.
+     */
+    overflowFixDone?: boolean;
 }
 
 export interface IMoodle {

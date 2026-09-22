@@ -738,18 +738,33 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     setupKalturaV7Player(entry: IKalturaV7Player): void {
-        if (!entry.config || entry.setupDone || !entry.doneCb) {
-            log.info(`AnnotoMoodle: skip Kaltura V7 player: ${entry.id}`);
+        if (entry.setupDone) {
             return;
         }
-        log.info(`AnnotoMoodle: setup Kaltura V7 player: ${entry.id}`);
-        entry.setupDone = true; // eslint-disable-line no-param-reassign
-        // Reuse the V2 override helper: injects clientId, backend, hooks, group and locale.
-        // As with V2, the Annoto plugin already set the player type/element - the override must
-        // NOT touch those.
-        this.setupKalturaPlugin(entry.config);
-        // Releasing the boot resolves the onSetup promise with the enriched config.
-        entry.doneCb();
+        // First, before anything can release the boot: put the Moodle context into the config the
+        // plugin will boot the widget with, so that booting without the course group is not a
+        // reachable state rather than something detected afterwards.
+        this.seedKalturaV7Config(entry);
+        if (entry.config && entry.doneCb) {
+            log.info(`AnnotoMoodle: setup Kaltura V7 player: ${entry.id}`);
+            entry.setupDone = true; // eslint-disable-line no-param-reassign
+            // Reuse the V2 override helper: injects clientId, backend, hooks, group and locale.
+            // As with V2, the Annoto plugin already set the player type/element - the override must
+            // NOT touch those.
+            this.setupKalturaPlugin(entry.config);
+            // Releasing the boot resolves the onSetup promise with the enriched config.
+            entry.doneCb();
+        } else {
+            // No config/doneCb yet. Either the plugin's setup hook is still in flight - the normal
+            // case, since the entry is handed over as soon as the player is captured - or it
+            // already fired without our handler because the capture lost the race, in which case it
+            // never will and the widget is booted on its bare uiConf config: no SSO token, no
+            // course group. Returning here (as this used to) left that second case silently
+            // anonymous, "Log in to the site", with nothing logged. Both cases are served by
+            // carrying on: service.getApi() resolves once the widget is ready either way, and by
+            // then a hook that did arrive has stored the enriched config on the entry.
+            log.info(`AnnotoMoodle: Kaltura V7 player awaiting setup hook: ${entry.id}`);
+        }
         // The playkit player renders inline inside Moodle's `.no-overflow` activity wrapper, which
         // clips the Annoto widget panel that opens beside the video. Unclip it (mirrors what
         // toggling the class to overflow-visible does by hand).
@@ -762,6 +777,10 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     fixKalturaV7Overflow(entry: IKalturaV7Player): void {
+        if (entry.overflowFixDone) {
+            return;
+        }
+        entry.overflowFixDone = true; // eslint-disable-line no-param-reassign
         try {
             const unclip = (): void => {
                 // Set overflow:visible on every `.no-overflow` ancestor of the player so the widget
@@ -792,10 +811,14 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     finalizeKalturaV7Player(entry: IKalturaV7Player): void {
+        if (entry.finalizeDone) {
+            return;
+        }
         if (!entry.service || typeof entry.service.getApi !== 'function') {
             log.warn(`AnnotoMoodle: Kaltura V7 service has no getApi: ${entry.id}`);
             return;
         }
+        entry.finalizeDone = true; // eslint-disable-line no-param-reassign
         const { userToken } = this.params;
         entry.service
             .getApi()
@@ -803,30 +826,111 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                 if (!api) {
                     return undefined;
                 }
-                // Apply the group/course context (and the rest of the enriched config). load() is
-                // the widget API's supported way to (re)apply a configuration; a failure here must
-                // not block SSO, so it is caught locally.
-                const enrichedConfig = entry.config;
-                const applyConfig =
-                    enrichedConfig && typeof api.load === 'function'
-                        ? Promise.resolve(api.load(enrichedConfig)).then(
-                              () => log.info(`AnnotoMoodle: applied group/config Kaltura V7 player: ${entry.id}`),
-                              (err: unknown) =>
-                                  log.warn(`AnnotoMoodle: Kaltura V7 config load failed: ${entry.id}`, err)
-                          )
-                        : Promise.resolve();
-                return applyConfig.then(() => {
-                    if (userToken && typeof api.auth === 'function') {
-                        log.info(`AnnotoMoodle: SSO auth Kaltura V7 player: ${entry.id}`);
-                        return api.auth(userToken);
-                    }
-                    log.info(`AnnotoMoodle: no SSO token, skipping Kaltura V7 auth: ${entry.id}`);
+                // Apply the course group (and the rest of the enriched config) with api.load(),
+                // the widget API's supported way to (re)apply a configuration, and only then auth.
+                // entry.config is read here rather than at call time: getApi() settles once the
+                // widget is ready, so a handshake that was still in flight when finalize started
+                // has stored the enriched config by now. If it never arrived, the config is
+                // recovered off the live widget instead.
+                const enrichedConfig = entry.config || this.recoverKalturaV7Config(entry);
+                if (!enrichedConfig || typeof api.load !== 'function') {
+                    // Fail closed. With no enriched config the widget is still running on the
+                    // player's uiConf config - no course group, possibly a different clientId and
+                    // region - so its threads are not scoped to this course. Authenticating the
+                    // user into that would file their activity against the wrong scope, which is
+                    // worse than the login prompt they get instead. Stay anonymous, and be loud.
+                    log.error(
+                        `AnnotoMoodle: Kaltura V7 course group not applied, skipping SSO auth to avoid mis-scoped activity: ${entry.id}`
+                    );
                     return undefined;
-                });
+                }
+                return Promise.resolve(api.load(enrichedConfig)).then(
+                    () => {
+                        log.info(`AnnotoMoodle: applied group/config Kaltura V7 player: ${entry.id}`);
+                        if (userToken && typeof api.auth === 'function') {
+                            log.info(`AnnotoMoodle: SSO auth Kaltura V7 player: ${entry.id}`);
+                            return api.auth(userToken);
+                        }
+                        log.info(`AnnotoMoodle: no SSO token, skipping Kaltura V7 auth: ${entry.id}`);
+                        return undefined;
+                    },
+                    (err: unknown) => {
+                        // Same reasoning as above: the group did not take, so do not auth.
+                        log.error(
+                            `AnnotoMoodle: Kaltura V7 config load failed, skipping SSO auth to avoid mis-scoped activity: ${entry.id}`,
+                            err
+                        );
+                        return undefined;
+                    }
+                );
             })
             .catch((err: unknown) => {
                 log.warn(`AnnotoMoodle: Kaltura V7 finalize (load/auth) failed: ${entry.id}`, err);
             });
+    }
+
+    /**
+     * Seeds the Moodle context into the config the playkit plugin will boot the widget with, so a
+     * boot without the course group cannot happen.
+     *
+     * The setup hook is the plugin's intended way to ask us for the config, but it fires exactly
+     * once and the capture can miss it (see setupKalturaV7Player), leaving the widget booted on the
+     * bare uiConf config: no course group, and the uiConf's clientId/region rather than Moodle's.
+     * Writing the override into the plugin's own `widgetConfig` closes that off, because
+     * `bootWidget()` boots with precisely that object - whenever it gets round to it, hook or no
+     * hook. `mergeConfigUpdate` is the plugin's own merge, so it deep-merges over what is already
+     * there and re-forces the parts only the plugin can supply: `widgets[0].player`
+     * (type/element/adaptorApi) and `hooks.setup`, which keeps the handshake working.
+     *
+     * @returns true when the group is now guaranteed to be in the boot config.
+     */
+    seedKalturaV7Config(entry: IKalturaV7Player): boolean {
+        try {
+            const plugin = entry.service?.plugin;
+            if (!plugin || typeof plugin.mergeConfigUpdate !== 'function') {
+                log.warn(`AnnotoMoodle: cannot seed Kaltura V7 boot config: ${entry.id}`);
+                return false;
+            }
+            if (plugin.isWidgetBooted) {
+                // Already booted, so this boot cannot be fixed up any more - api.load() in
+                // finalizeKalturaV7Player is what repairs the running widget instead.
+                log.info(`AnnotoMoodle: Kaltura V7 widget already booted, seeding too late: ${entry.id}`);
+                return false;
+            }
+            plugin.widgetConfig = plugin.mergeConfigUpdate(this.configOverride);
+            log.info(`AnnotoMoodle: seeded group/config into Kaltura V7 boot config: ${entry.id}`);
+            return true;
+        } catch (err) {
+            log.warn(`AnnotoMoodle: Kaltura V7 boot config seed failed: ${entry.id}`, err);
+            return false;
+        }
+    }
+
+    /**
+     * Best-effort widget config for a player whose setup-hook handshake never reached us: the
+     * widget is already booted from the uiConf config, so it carries no Moodle context at all.
+     * The widget API has no way to read a running config back, so the live one is taken off the
+     * playkit plugin behind the service and enriched the same way the handshake would have. When
+     * seedKalturaV7Config got there first this is already the enriched config; the merge is kept so
+     * that a failed seed still yields a config carrying the group.
+     * `configOverride` carries no `widgets`, so the plugin's own player type/element/adaptorApi
+     * survive the merge - passing a config without them to api.load() would detach the widget.
+     * Returns undefined if the shape is not what we expect, in which case the caller does not
+     * authenticate at all rather than scope the user's activity wrongly.
+     */
+    recoverKalturaV7Config(entry: IKalturaV7Player): IConfig | undefined {
+        try {
+            const live = entry.service?.plugin?.widgetConfig as IConfig | undefined;
+            if (!live || !Array.isArray(live.widgets) || live.widgets.length === 0) {
+                log.error(`AnnotoMoodle: no live Kaltura V7 config to enrich: ${entry.id}`);
+                return undefined;
+            }
+            log.info(`AnnotoMoodle: setup hook was missed, recovered live config: ${entry.id}`);
+            return { ...live, ...this.configOverride } as IConfig;
+        } catch (err) {
+            log.warn(`AnnotoMoodle: Kaltura V7 config recovery failed: ${entry.id}`, err);
+            return undefined;
+        }
     }
 
     setupKalturaPlugin(config: IConfig): void {
