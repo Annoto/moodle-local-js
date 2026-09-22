@@ -171,6 +171,35 @@ function discover(known, kV7App, KalturaPlayer) {
     return found;
 }
 
+// AnnotoMoodle.isKalturaV7Page + the continuation rule in kalturaV7Sweep(). The bundle is set up
+// on every page the Moodle plugin runs on, so the sweep must not keep ticking for a minute on the
+// pages - entire installations, for a customer not using Kaltura - where no playkit player can
+// appear. Past the fast phase it continues only where there is some sign of one.
+const SWEEP_FAST_TICKS = 50;
+const SWEEP_TOTAL_TICKS = 105;
+
+function isKalturaV7Page(win) {
+    return (
+        !!win.KalturaPlayer ||
+        !!(win.moodleAnnoto && win.moodleAnnoto.kV7App) ||
+        !!win.document.querySelector('.kaltura-player-container')
+    );
+}
+
+// How many ticks the sweep would run for on this page.
+function sweepTicks(win) {
+    let ticks = 0;
+    for (;;) {
+        ticks += 1;
+        if (ticks >= SWEEP_TOTAL_TICKS) {
+            return ticks;
+        }
+        if (ticks >= SWEEP_FAST_TICKS && !isKalturaV7Page(win)) {
+            return ticks;
+        }
+    }
+}
+
 // ---- harness -----------------------------------------------------------------------------------
 
 const UICONF_PLUGIN_CONFIG = {
@@ -479,6 +508,20 @@ async function selfDiscovery(env, PluginClass, { late }) {
         console.log(JSON.stringify(results[key], null, 2).replace(/^/gm, '  '));
     }
 
+    // The sweep's reach: a page with no sign of playkit must stop at the end of the fast phase.
+    const bareWindow = new JSDOM('<!doctype html><html><body><div id="page"></div></body></html>')
+        .window;
+    const v7Window = new JSDOM(
+        '<!doctype html><html><body><div class="kaltura-player-container"></div></body></html>'
+    ).window;
+    const lateLibWindow = new JSDOM('<!doctype html><html><body></body></html>').window;
+    lateLibWindow.KalturaPlayer = {}; // library loaded after setup, before the fast phase ended
+    console.log(
+        `\n--- sweep reach ---\n  bare page: ${sweepTicks(bareWindow)} ticks` +
+            `\n  V7 page: ${sweepTicks(v7Window)} ticks` +
+            `\n  late library: ${sweepTicks(lateLibWindow)} ticks`
+    );
+
     const { seeded, unseeded, late, unreachable, discoveredEarly, discoveredLate } = results;
     const checks = [
         // The plugin still exposes what the seed and the recovery reach for.
@@ -561,6 +604,20 @@ async function selfDiscovery(env, PluginClass, { late }) {
         [
             'a second sweep finds nothing new',
             discoveredEarly.secondSweepCount === 0 && discoveredLate.secondSweepCount === 0,
+        ],
+
+        // Reach: customers with no Kaltura must not carry the sweep for a minute on every page.
+        [
+            'a page with no sign of playkit stops after the fast phase',
+            sweepTicks(bareWindow) === SWEEP_FAST_TICKS,
+        ],
+        [
+            'a page with a player container sweeps in full',
+            sweepTicks(v7Window) === SWEEP_TOTAL_TICKS,
+        ],
+        [
+            'a library that loaded late still sweeps in full',
+            sweepTicks(lateLibWindow) === SWEEP_TOTAL_TICKS,
         ],
     ];
 

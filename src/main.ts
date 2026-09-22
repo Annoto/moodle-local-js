@@ -756,12 +756,35 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     kalturaV7Sweep(): void {
         this.kalturaV7Discover();
         this.kalturaV7SweepTicks += 1;
-        if (this.kalturaV7SweepTicks < KALTURA_V7_SWEEP_TOTAL_TICKS) {
-            setTimeout(
-                () => this.kalturaV7Sweep(),
-                this.kalturaV7SweepTicks < KALTURA_V7_SWEEP_FAST_TICKS ? 100 : 1000
-            );
+        if (this.kalturaV7SweepTicks >= KALTURA_V7_SWEEP_TOTAL_TICKS) {
+            return;
         }
+        // The bundle is set up on every page the plugin runs on, so most of these sweeps are on
+        // pages - whole installations, for a customer not using Kaltura - where no V7 player will
+        // ever appear. Past the fast phase, keep going only where there is some sign of playkit.
+        if (this.kalturaV7SweepTicks >= KALTURA_V7_SWEEP_FAST_TICKS && !this.isKalturaV7Page) {
+            log.info('AnnotoMoodle: no Kaltura V7 player on this page, sweep done');
+            return;
+        }
+        setTimeout(
+            () => this.kalturaV7Sweep(),
+            this.kalturaV7SweepTicks < KALTURA_V7_SWEEP_FAST_TICKS ? 100 : 1000
+        );
+    }
+
+    /**
+     * Whether anything on the page suggests a playkit (V7) player: the player library, the Moodle
+     * plugin's hook, or a player container in the DOM. Re-read on every tick rather than decided
+     * once at setup, because the player is built from an async uiConf and can appear long after
+     * the bundle initialises - gating the sweep on a single early check would reinstate the race
+     * the sweep exists to close.
+     */
+    get isKalturaV7Page(): boolean {
+        return (
+            !!kalturaGlobal.KalturaPlayer ||
+            !!moodleAnnoto.kV7App ||
+            !!document.querySelector('.kaltura-player-container')
+        );
     }
 
     kalturaV7Discover(): void {
