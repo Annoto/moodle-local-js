@@ -43,6 +43,11 @@ const global = window as unknown as {
     Annoto: AnnotoMain;
 };
 const { moodleAnnoto } = window as unknown as { moodleAnnoto: IMoodleAnnoto };
+const kalturaGlobal = window as unknown as {
+    KalturaPlayer?: { getPlayers?: () => Record<string, any> }; // eslint-disable-line @typescript-eslint/no-explicit-any
+};
+const KALTURA_V7_SWEEP_FAST_TICKS = 50; // 50 x 100ms = 5s
+const KALTURA_V7_SWEEP_TOTAL_TICKS = 105; // + 55 x 1000ms = 60s in total
 const { $ } = moodleAnnoto;
 let { log } = moodleAnnoto;
 
@@ -64,6 +69,12 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     activePlayer?: IPlayerParams;
     videojsResolvePromise?: Promise<unknown>;
     moodleFormat: MoodlePageFormatType = 'plain';
+    /**
+     * One entry per Kaltura V7 player id, however the player reached us: the plugin's setup-hook
+     * ping, the plugin's playersMap, or our own KalturaPlayer.getPlayers() sweep.
+     */
+    kalturaV7Players: KalturaV7PlayersMapType = {};
+    kalturaV7SweepTicks = 0;
     readonly log: typeof log = log;
     myActivityResponse?: IMyActivity;
     trPromise?: Promise<IMoodleTr>;
@@ -715,15 +726,122 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     kalturaV7Init(): void {
-        const maKV7App = moodleAnnoto.kV7App;
         moodleAnnoto.setupKalturaV7PlayersMap = this.setupKalturaV7PlayersMap.bind(this);
+        log.info(
+            `AnnotoMoodle: Kaltura V7 ${moodleAnnoto.kV7App ? 'loaded' : 'not loaded'} on init`
+        );
+        this.kalturaV7Sweep();
+    }
 
-        if (maKV7App) {
-            log.info('AnnotoMoodle: Kaltura V7 loaded on init');
-            this.setupKalturaV7PlayersMap(maKV7App.playersMap);
-        } else {
-            log.info('AnnotoMoodle: Kaltura V7 not loaded on init');
+    /*
+     * Find the V7 players ourselves instead of only waiting to be handed them.
+     *
+     * The plugin's initkaltura.js hands us its playersMap from inside the playkit setup-hook
+     * handler - and with plugin <= 5.5.3 from nowhere else. That hook fires exactly once, so if
+     * the widget booted before the handler was registered (a warm cache, with the hook script
+     * emitted at the end of the body) the hand-over never comes: the entry sits in
+     * moodleAnnoto.kV7App.playersMap unprocessed and the user is left anonymous, "Log in to the
+     * site", with nothing logged. A player created through a KalturaPlayer.setup the plugin did not
+     * wrap (a second uiConf bundle redefining the global) never reaches that map at all. Reading
+     * the map once on init does not close either gap: the plugin's capture can land up to 10s
+     * after we initialise. So sweep both places on a timer - the plugin's map, and
+     * KalturaPlayer.getPlayers() directly - and set up every player we have not seen. The once-only
+     * steps are tracked on the entry, so a player reaching us twice is handled once.
+     *
+     * 100ms for 5s: on a warm cache the widget boots in well under a second, and getting there
+     * first lets seedKalturaV7Config put the group into the boot config (a later find is still
+     * repaired via api.load, at the cost of the widget booting anonymous first). Then 1s for the
+     * rest of a minute, for a player added by a late AJAX render.
+     */
+    kalturaV7Sweep(): void {
+        this.kalturaV7Discover();
+        this.kalturaV7SweepTicks += 1;
+        if (this.kalturaV7SweepTicks < KALTURA_V7_SWEEP_TOTAL_TICKS) {
+            setTimeout(
+                () => this.kalturaV7Sweep(),
+                this.kalturaV7SweepTicks < KALTURA_V7_SWEEP_FAST_TICKS ? 100 : 1000
+            );
         }
+    }
+
+    kalturaV7Discover(): void {
+        const map = moodleAnnoto.kV7App?.playersMap;
+        if (map) {
+            Object.values(map).forEach((entry) => {
+                if (!this.kalturaV7Players[entry.id]) {
+                    log.info(`AnnotoMoodle: Kaltura V7 player found in plugin map: ${entry.id}`);
+                    this.setupKalturaV7Player(entry);
+                }
+            });
+        }
+        const kp = kalturaGlobal.KalturaPlayer;
+        if (!kp || typeof kp.getPlayers !== 'function') {
+            return;
+        }
+        let players: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+        try {
+            players = kp.getPlayers() || {};
+        } catch (err) {
+            log.warn('AnnotoMoodle: KalturaPlayer.getPlayers failed', err);
+            return;
+        }
+        Object.values(players).forEach((player) => {
+            const id: string | undefined =
+                (player && player.config && player.config.targetId) || (player && player.id);
+            if (
+                !id ||
+                this.kalturaV7Players[id] ||
+                !player ||
+                typeof player.getService !== 'function'
+            ) {
+                return;
+            }
+            // The Annoto plugin is constructed from the async uiConf, so the service may not be
+            // there yet (or ever, for a player without the plugin) - the next tick looks again.
+            let service;
+            try {
+                service = player.getService('annoto');
+            } catch (err) {
+                return;
+            }
+            if (!service || typeof service.getApi !== 'function') {
+                return;
+            }
+            log.info(`AnnotoMoodle: discovered Kaltura V7 player: ${id}`);
+            this.setupKalturaV7Player({ id, player, service });
+        });
+    }
+
+    /**
+     * Folds a hand-over into the one entry kept per player id. The same player can reach us as
+     * different objects - the plugin's entry (its playersMap / setup-hook ping) and our own from
+     * kalturaV7Discover - while the once-only steps (seed, unclip, finalize) are tracked on the
+     * entry. So the first object seen for an id is the entry, and a later one only contributes
+     * what the entry lacks: typically the hook's config and doneCb. Copying the config by
+     * reference is what keeps the plugin's handshake intact - setupKalturaPlugin enriches it in
+     * place, so the plugin's closure resolves its onSetup promise with the enriched object.
+     */
+    adoptKalturaV7Entry(incoming: IKalturaV7Player): IKalturaV7Player {
+        const known = this.kalturaV7Players[incoming.id];
+        if (!known) {
+            this.kalturaV7Players[incoming.id] = incoming;
+            return incoming;
+        }
+        if (known !== incoming) {
+            if (!known.config && incoming.config) {
+                known.config = incoming.config;
+            }
+            if (!known.doneCb && incoming.doneCb) {
+                known.doneCb = incoming.doneCb;
+            }
+            if (!known.service && incoming.service) {
+                known.service = incoming.service;
+            }
+            if (!known.player && incoming.player) {
+                known.player = incoming.player;
+            }
+        }
+        return known;
     }
 
     setupKalturaV7PlayersMap(playersMap: KalturaV7PlayersMapType): void {
@@ -737,7 +855,8 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         });
     }
 
-    setupKalturaV7Player(entry: IKalturaV7Player): void {
+    setupKalturaV7Player(incoming: IKalturaV7Player): void {
+        const entry = this.adoptKalturaV7Entry(incoming);
         if (entry.setupDone) {
             return;
         }
@@ -846,12 +965,16 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                 }
                 return Promise.resolve(api.load(enrichedConfig)).then(
                     () => {
-                        log.info(`AnnotoMoodle: applied group/config Kaltura V7 player: ${entry.id}`);
+                        log.info(
+                            `AnnotoMoodle: applied group/config Kaltura V7 player: ${entry.id}`
+                        );
                         if (userToken && typeof api.auth === 'function') {
                             log.info(`AnnotoMoodle: SSO auth Kaltura V7 player: ${entry.id}`);
                             return api.auth(userToken);
                         }
-                        log.info(`AnnotoMoodle: no SSO token, skipping Kaltura V7 auth: ${entry.id}`);
+                        log.info(
+                            `AnnotoMoodle: no SSO token, skipping Kaltura V7 auth: ${entry.id}`
+                        );
                         return undefined;
                     },
                     (err: unknown) => {
@@ -885,6 +1008,10 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
      * @returns true when the group is now guaranteed to be in the boot config.
      */
     seedKalturaV7Config(entry: IKalturaV7Player): boolean {
+        if (entry.seedDone) {
+            return false;
+        }
+        entry.seedDone = true; // eslint-disable-line no-param-reassign
         try {
             const plugin = entry.service?.plugin;
             if (!plugin || typeof plugin.mergeConfigUpdate !== 'function') {
@@ -894,7 +1021,9 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             if (plugin.isWidgetBooted) {
                 // Already booted, so this boot cannot be fixed up any more - api.load() in
                 // finalizeKalturaV7Player is what repairs the running widget instead.
-                log.info(`AnnotoMoodle: Kaltura V7 widget already booted, seeding too late: ${entry.id}`);
+                log.info(
+                    `AnnotoMoodle: Kaltura V7 widget already booted, seeding too late: ${entry.id}`
+                );
                 return false;
             }
             plugin.widgetConfig = plugin.mergeConfigUpdate(this.configOverride);
@@ -1293,7 +1422,11 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                     ...reqDetails.map(
                         (item) => `
                             <span style="padding:0 4px;">
-                                <i class="icon fa fa-${item.icon} fa-fw" aria-hidden="true" style="font-size:16px;"></i> ${escapeHtml(item.value)}
+                                <i class="icon fa fa-${
+                                    item.icon
+                                } fa-fw" aria-hidden="true" style="font-size:16px;"></i> ${escapeHtml(
+                                    item.value
+                                )}
                             </span>
                         `
                     ),
@@ -1301,11 +1434,15 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             }
         }
         moodleAnnoto.$(completionInfoEl).html(`
-            <div class="automatic-completion-conditions" data-region="completionrequirements" role="list" aria-label="${escapeHtml(requirementLabel)}">
+            <div class="automatic-completion-conditions" data-region="completionrequirements" role="list" aria-label="${escapeHtml(
+                requirementLabel
+            )}">
                 <span class="badge badge-pill ${
                     isActivityCompleted ? 'alert-success' : 'badge-light'
                 }" role="listitem">
-                    <span><img src="https://cdn.annoto.net/assets/latest/images/icon.svg" aria-hidden="true" style="width:16px;height:auto;"> ${escapeHtml(text)}</span>
+                    <span><img src="https://cdn.annoto.net/assets/latest/images/icon.svg" aria-hidden="true" style="width:16px;height:auto;"> ${escapeHtml(
+                        text
+                    )}</span>
                     ${reqDetailsHtml.join('')}
                 </span>
             </div>

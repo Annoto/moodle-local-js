@@ -84,6 +84,11 @@ export interface IKalturaV7Player {
     doneCb?: () => void;
     setupDone?: boolean;
     /**
+     * Set once seeding the boot config has been attempted, so the sweep and a repeat hand-over
+     * do not re-seed (and re-log) a player on every pass.
+     */
+    seedDone?: boolean;
+    /**
      * Set once the widget API has been asked for (api.load/api.auth), so that pass runs at most
      * once per player even though the entry can be handed to the bundle more than once.
      */

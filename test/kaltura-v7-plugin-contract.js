@@ -5,7 +5,10 @@
  * is applied (`seedKalturaV7Config` / `recoverKalturaV7Config`). Those touch plugin internals -
  * `service.plugin`, `plugin.widgetConfig`, `plugin.mergeConfigUpdate`, `plugin.isWidgetBooted` - so
  * a plugin release that renames any of them would silently stop scoping activity to the course.
- * This test loads the REAL published plugin bundle and asserts the contract still holds.
+ * It also finds players on its own (`kalturaV7Discover`: KalturaPlayer.getPlayers() and
+ * player.getService('annoto')), so that a Moodle plugin whose hand-over never comes (<= 5.5.3
+ * with a missed setup hook) is still repaired. This test loads the REAL published plugin bundle
+ * and asserts the contract still holds.
  *
  *   npm run test:kaltura-v7
  *   PLUGIN_BUNDLE=/path/to/plugin.js npm run test:kaltura-v7    # offline, against a local copy
@@ -134,6 +137,40 @@ async function finalize(service, entryConfig, override, userToken) {
     return { authed: true };
 }
 
+// AnnotoMoodle.kalturaV7Discover() + adoptKalturaV7Entry(): one entry per player id, taken from
+// the plugin's playersMap first and then from KalturaPlayer.getPlayers() directly. Returns only the
+// entries not seen before - a player reaching the bundle twice is set up once.
+function discover(known, kV7App, KalturaPlayer) {
+    const found = [];
+    const map = kV7App && kV7App.playersMap;
+    if (map) {
+        Object.values(map).forEach((entry) => {
+            if (!known[entry.id]) {
+                known[entry.id] = entry;
+                found.push({ entry, via: 'map' });
+            }
+        });
+    }
+    const players =
+        (KalturaPlayer &&
+            typeof KalturaPlayer.getPlayers === 'function' &&
+            KalturaPlayer.getPlayers()) ||
+        {};
+    Object.values(players).forEach((player) => {
+        const id = (player.config && player.config.targetId) || player.id;
+        if (!id || known[id] || typeof player.getService !== 'function') {
+            return;
+        }
+        const service = player.getService('annoto');
+        if (!service || typeof service.getApi !== 'function') {
+            return;
+        }
+        known[id] = { id, player, service };
+        found.push({ entry: known[id], via: 'getPlayers' });
+    });
+    return found;
+}
+
 // ---- harness -----------------------------------------------------------------------------------
 
 const UICONF_PLUGIN_CONFIG = {
@@ -211,6 +248,8 @@ function buildEnv(pluginSource) {
     };
 
     const registered = {};
+    // What KalturaPlayer.getPlayers() returns - scenarios register players here.
+    const players = {};
     const KalturaPlayer = {
         BasePlugin,
         core: {
@@ -227,7 +266,7 @@ function buildEnv(pluginSource) {
                 Object: { mergeDeep: (t, ...s) => KUtils.mergeDeep(t, ...s) },
             },
         },
-        getPlayers: () => ({}),
+        getPlayers: () => players,
         setup: () => {
             throw new Error('not used by this test');
         },
@@ -248,9 +287,16 @@ function buildEnv(pluginSource) {
         'KalturaPlayer',
         'MutationObserver',
         pluginSource
-    )(dom.window, document, dom.window, dom.window.navigator, KalturaPlayer, global.MutationObserver);
+    )(
+        dom.window,
+        document,
+        dom.window,
+        dom.window.navigator,
+        KalturaPlayer,
+        global.MutationObserver
+    );
 
-    return { dom, calls, registered };
+    return { dom, calls, registered, players };
 }
 
 function makePlayer() {
@@ -309,7 +355,9 @@ async function earlyCapture(env, PluginClass, { seedIt }) {
     // eslint-disable-next-line no-new
     new PluginClass('annoto', player, UICONF_PLUGIN_CONFIG);
     const service = captured || player.getService('annoto');
-    const seedResult = seedIt ? seed(service, CONFIG_OVERRIDE) : { seeded: false, reason: 'skipped' };
+    const seedResult = seedIt
+        ? seed(service, CONFIG_OVERRIDE)
+        : { seeded: false, reason: 'skipped' };
     await settle();
     return {
         capturedOnEvent: !!captured,
@@ -347,6 +395,60 @@ async function lateCapture(env, PluginClass, { breakPluginAccess }) {
     };
 }
 
+/**
+ * No hand-over from the Moodle plugin at all (<= 5.5.3 with a missed setup hook, or a player it
+ * never wrapped): the bundle finds the player through KalturaPlayer.getPlayers() itself. `late`
+ * additionally puts the same player in the plugin's map, as 5.5.3 does after its capture poll, and
+ * runs a second sweep - the player must be set up exactly once.
+ */
+async function selfDiscovery(env, PluginClass, { late }) {
+    const player = makePlayer();
+    env.players.kaltura_player_1 = player;
+    // eslint-disable-next-line no-new
+    new PluginClass('annoto', player, UICONF_PLUGIN_CONFIG);
+    let bootedUnenriched = false;
+    const kV7App = { playersMap: {} };
+    if (late) {
+        await settle();
+        bootedUnenriched = env.calls.boot.length === 1 && !env.calls.boot[0].group;
+        kV7App.playersMap.kaltura_player_1 = {
+            id: 'kaltura_player_1',
+            player,
+            service: player.getService('annoto'),
+        };
+    }
+    const known = {};
+    const found = discover(known, kV7App, global.KalturaPlayer);
+    const results = [];
+    for (const { entry } of found) {
+        const seedResult = seed(entry.service, CONFIG_OVERRIDE);
+        // eslint-disable-next-line no-await-in-loop
+        const finalizeResult = await finalize(
+            entry.service,
+            entry.config,
+            CONFIG_OVERRIDE,
+            'MOODLE-SSO-JWT'
+        );
+        results.push({ seedResult, finalizeResult });
+    }
+    await settle(10);
+    const secondSweep = discover(known, kV7App, global.KalturaPlayer);
+    return {
+        bootedUnenriched,
+        foundCount: found.length,
+        foundVia: found.map((f) => f.via),
+        secondSweepCount: secondSweep.length,
+        seedResult: results[0] && results[0].seedResult,
+        finalizeResult: results[0] && results[0].finalizeResult,
+        bootCount: env.calls.boot.length,
+        boot: describeBootConfig(env.calls.boot[0]),
+        loadCount: env.calls.load.length,
+        loaded: describeBootConfig(env.calls.load[0]),
+        authCount: env.calls.auth.length,
+        authed: env.calls.auth.length === 1 && env.calls.auth[0] === 'MOODLE-SSO-JWT',
+    };
+}
+
 (async () => {
     const { source, from } = await loadPluginSource();
     console.log(`Annoto playkit plugin under test: ${from}\n`);
@@ -357,15 +459,17 @@ async function lateCapture(env, PluginClass, { breakPluginAccess }) {
         ['unseeded', (env, C) => earlyCapture(env, C, { seedIt: false })],
         ['late', (env, C) => lateCapture(env, C, { breakPluginAccess: false })],
         ['unreachable', (env, C) => lateCapture(env, C, { breakPluginAccess: true })],
+        ['discoveredEarly', (env, C) => selfDiscovery(env, C, { late: false })],
+        ['discoveredLate', (env, C) => selfDiscovery(env, C, { late: true })],
     ]) {
         // A fresh environment per scenario: the plugin bundle keeps module-level state.
         const env = buildEnv(source);
         const PluginClass = env.registered.annoto;
         if (!PluginClass) {
             console.error(
-                `FAIL: plugin did not register under the name "annoto" (registered: ${Object.keys(
-                    env.registered
-                ).join(', ') || 'none'})`
+                `FAIL: plugin did not register under the name "annoto" (registered: ${
+                    Object.keys(env.registered).join(', ') || 'none'
+                })`
             );
             process.exit(1);
         }
@@ -375,7 +479,7 @@ async function lateCapture(env, PluginClass, { breakPluginAccess }) {
         console.log(JSON.stringify(results[key], null, 2).replace(/^/gm, '  '));
     }
 
-    const { seeded, unseeded, late, unreachable } = results;
+    const { seeded, unseeded, late, unreachable, discoveredEarly, discoveredLate } = results;
     const checks = [
         // The plugin still exposes what the seed and the recovery reach for.
         ['service is registered as "annoto"', seeded.capturedOnEvent],
@@ -384,7 +488,10 @@ async function lateCapture(env, PluginClass, { breakPluginAccess }) {
 
         // Seeding: the group is in the config the widget is actually booted with.
         ['seeded boot carries the course group', seeded.boot.group === '42'],
-        ['seeded boot carries the group title', seeded.boot.groupTitle === 'Functional Neuroanatomy'],
+        [
+            'seeded boot carries the group title',
+            seeded.boot.groupTitle === 'Functional Neuroanatomy',
+        ],
         ['seeded boot uses the Moodle clientId', seeded.boot.clientId === 'MOODLE-CLIENT-ID'],
         ['seeded boot uses the Moodle backend', seeded.boot.backend === 'eu.annoto.net'],
         ['seeded boot carries the SSO token', seeded.boot.ssoToken === 'MOODLE-SSO-JWT'],
@@ -396,7 +503,10 @@ async function lateCapture(env, PluginClass, { breakPluginAccess }) {
 
         // Without the seed this is the bug being fixed.
         ['unseeded boot has NO group', !unseeded.boot.group],
-        ['unseeded boot falls back to the uiConf clientId', unseeded.boot.clientId === 'UICONF-CLIENT-ID'],
+        [
+            'unseeded boot falls back to the uiConf clientId',
+            unseeded.boot.clientId === 'UICONF-CLIENT-ID',
+        ],
 
         // Recovery after a missed capture.
         ['late capture booted un-enriched first', late.bootedUnenriched === true],
@@ -409,7 +519,49 @@ async function lateCapture(env, PluginClass, { breakPluginAccess }) {
         // Fail closed: no group means no authenticated (and therefore mis-scoped) activity.
         ['plugin unreachable does not load', unreachable.loadCount === 0],
         ['plugin unreachable does NOT auth', unreachable.authed === false],
-        ['plugin unreachable reports fail closed', /fail closed/.test(unreachable.finalizeResult.reason)],
+        [
+            'plugin unreachable reports fail closed',
+            /fail closed/.test(unreachable.finalizeResult.reason),
+        ],
+
+        // No hand-over from the Moodle plugin: the bundle finds the player itself.
+        [
+            'self-discovery finds the player via getPlayers',
+            discoveredEarly.foundVia.join() === 'getPlayers',
+        ],
+        ['self-discovery before boot seeds the group', discoveredEarly.seedResult.seeded === true],
+        [
+            'self-discovery before boot boots ONCE with the group',
+            discoveredEarly.bootCount === 1 && discoveredEarly.boot.group === '42',
+        ],
+        [
+            'self-discovery before boot boots with the Moodle clientId',
+            discoveredEarly.boot.clientId === 'MOODLE-CLIENT-ID',
+        ],
+        ['self-discovery before boot auths', discoveredEarly.authed === true],
+        [
+            'self-discovery after boot booted un-enriched first',
+            discoveredLate.bootedUnenriched === true,
+        ],
+        [
+            'self-discovery after boot takes the plugin map entry',
+            discoveredLate.foundVia.join() === 'map',
+        ],
+        [
+            'self-discovery after boot recovers the group via api.load',
+            discoveredLate.loaded.group === '42',
+        ],
+        ['self-discovery after boot auths', discoveredLate.authed === true],
+        [
+            'a player in the map AND getPlayers is set up once',
+            discoveredLate.foundCount === 1 &&
+                discoveredLate.loadCount === 1 &&
+                discoveredLate.authCount === 1,
+        ],
+        [
+            'a second sweep finds nothing new',
+            discoveredEarly.secondSweepCount === 0 && discoveredLate.secondSweepCount === 0,
+        ],
     ];
 
     console.log('\n--- assertions ---');
@@ -420,6 +572,8 @@ async function lateCapture(env, PluginClass, { breakPluginAccess }) {
         }
         console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${label}`);
     }
-    console.log(`\n${failed === 0 ? `ALL ${checks.length} PASS` : `${failed} of ${checks.length} FAILED`}`);
+    console.log(
+        `\n${failed === 0 ? `ALL ${checks.length} PASS` : `${failed} of ${checks.length} FAILED`}`
+    );
     process.exit(failed === 0 ? 0 : 1);
 })();
