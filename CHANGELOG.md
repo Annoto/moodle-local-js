@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.7](https://github.com/Annoto/moodle-local-js/compare/v1.3.6...v1.3.7) (2026-09-22)
+
+
+### Bug Fixes
+
+* find Kaltura V7 players ourselves so the fix needs no plugin update ([b61f859](https://github.com/Annoto/moodle-local-js/commit/b61f85966e06ee493d746e13df09bb3f3c244e1e))
+* Kaltura V7 SSO lost when the playkit setup hook is missed ([4d59ce3](https://github.com/Annoto/moodle-local-js/commit/4d59ce36461a83112b84bf00a807cf88b966e8f4))
+* Kaltura V7 SSO lost when the playkit setup hook is missed ([8f24fd0](https://github.com/Annoto/moodle-local-js/commit/8f24fd071945b0ba221fac5d54a54f6c360f8abf))
+* stop the Kaltura V7 sweep on pages with no sign of playkit ([62b7ada](https://github.com/Annoto/moodle-local-js/commit/62b7ada3b579320a609e7bb016bb01f35042cc0e))
+
 ## [1.3.5](https://github.com/Annoto/moodle-local-js/compare/v1.3.4...v1.3.5) (2025-08-06)
 
 
