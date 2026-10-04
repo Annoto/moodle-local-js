@@ -47,3 +47,7 @@ dist/
 # Local dev TLS certificates (mkcert) - never commit, contain private keys
 certs/
 *.pem
+
+# Claude Code personal files
+.claude/settings.local.json
+CLAUDE.local.md
