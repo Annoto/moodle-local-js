@@ -64,6 +64,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     params!: IMoodleJsParams;
     isSetup = false;
     isBootstrapped = false;
+    isPageScrollFixApplied = false;
     isloaded = false;
     annotoAPI?: IAnnotoApi;
     config!: IConfig;
@@ -482,7 +483,15 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         // <video> first so the html5 detection below can attach to them. Look them up with jQuery
         // like every selector below: `parent` is not always an element (the document ready callback
         // passes the jQuery function itself), and jQuery tolerates that where the DOM API throws.
-        replaceZoodleIframes($(parent).find(ZOODLE_IFRAME_SELECTOR).get() as HTMLIFrameElement[], log);
+        const zoodleCount = replaceZoodleIframes(
+            $(parent).find(ZOODLE_IFRAME_SELECTOR).get() as HTMLIFrameElement[],
+            log
+        );
+        if (zoodleCount > 0) {
+            // the widget is positioned in document coordinates, so it must not live next to a player
+            // that scrolls inside #page (Moodle 4.3+ drawers layout)
+            this.applyPageScrollFix(true);
+        }
         const h5p = $(parent).find('iframe.h5p-iframe').first().get(0);
         const youtube = $(parent).find('iframe[src*="youtube.com"]').first().get(0);
         const vimeo = $(parent).find('iframe[src*="vimeo.com"]').first().get(0);
@@ -1522,11 +1531,20 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         ]);
     };
 
-    applyPageScrollFix(): void {
+    /**
+     * Make the window the page scroller instead of #page, so the widget (positioned in document
+     * coordinates) scrolls together with the player.
+     * @param force apply regardless of the Moodle version (used for Zoodle embeds)
+     */
+    applyPageScrollFix(force = false): void {
         const { major, minor } = this.moodleRelease;
-        if (major === 4 && minor < 3) {
+        if (this.isPageScrollFixApplied) {
+            return;
+        }
+        if (force || (major === 4 && minor < 3)) {
             const { pageEl } = this;
             if (pageEl) {
+                this.isPageScrollFixApplied = true;
                 log.info('AnnotoMoodle: apply page scroll fix');
                 pageEl.style.overflow = 'visible';
                 // moodle has a js that sets overflow to auto on resize for smaller screens

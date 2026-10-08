@@ -14,6 +14,18 @@ const ZOODLE_HOST_RE = /(^|\.)zoodle\.macam\.ac\.il$/i;
 // tolerate the double slash Zoodle emits (`//qsm/media/<id>`) and an optional trailing slash
 const ZOODLE_MEDIA_PATH_RE = /^\/+([\w-]+)\/media\/([\w-]+)\/?$/;
 const ZOODLE_MARKER_ATTR = 'data-annoto-zoodle';
+// iframe inline styles used to crop the Zoodle page, dropped from the native <video>
+const ZOODLE_CROP_STYLES = [
+    'position',
+    'top',
+    'bottom',
+    'left',
+    'right',
+    'height',
+    'min-height',
+    'max-height',
+    'margin-top',
+];
 // coarse pre-filter for the caller's lookup; parseZoodleSrc does the real host/path check
 export const ZOODLE_IFRAME_SELECTOR = 'iframe[src*="zoodle."]';
 
@@ -71,14 +83,25 @@ export const createZoodleVideo = (
     source.type = 'video/mp4';
     video.appendChild(source);
 
-    // keep the author's sizing so the page layout does not jump
-    ['id', 'class', 'width', 'height', 'title'].forEach((attr) => {
+    // keep the author's width, but not the height: authors size the iframe to crop the Zoodle page
+    // chrome (e.g. `position:relative; top:-205px; height:900px`). On a native <video> that crop
+    // only adds letterboxing and shifts the player, and the widget takes its height from the
+    // element, so it ends up taller than the visible video and offset from it.
+    ['id', 'class', 'width', 'title'].forEach((attr) => {
         const value = iframeEl.getAttribute(attr);
         if (value) {
             video.setAttribute(attr, value);
         }
     });
     video.style.cssText = iframeEl.style.cssText;
+    ZOODLE_CROP_STYLES.forEach((prop) => video.style.removeProperty(prop));
+    video.style.height = 'auto';
+    video.style.aspectRatio = '16 / 9';
+    video.addEventListener('loadedmetadata', () => {
+        if (video.videoWidth && video.videoHeight) {
+            video.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+        }
+    });
     video.style.maxWidth = video.style.maxWidth || '100%';
     video.style.backgroundColor = '#000';
     return video;

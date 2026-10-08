@@ -71,7 +71,7 @@ test('rejects non Zoodle hosts, look-alike hosts, http and other paths', () => {
     ].forEach((src) => assert.strictEqual(parseZoodleSrc(src), undefined, String(src)));
 });
 
-test('replaces the iframe with a native video keeping its sizing', () => {
+test('replaces the iframe with a native video keeping its width', () => {
     document.body.innerHTML = `
         <div class="no-overflow">
             <iframe id="z1" src="https://zoodle.macam.ac.il//qsm/media/oN0AsNdhRu11Nov04"
@@ -85,7 +85,9 @@ test('replaces the iframe with a native video keeping its sizing', () => {
     assert.ok(video, 'video inserted in place of the iframe');
     assert.strictEqual(video.id, 'z1');
     assert.strictEqual(video.getAttribute('width'), '640');
-    assert.strictEqual(video.style.height, '450px');
+    assert.strictEqual(video.style.width, '100%');
+    assert.strictEqual(video.getAttribute('height'), null, 'iframe height is not copied');
+    assert.strictEqual(video.style.height, 'auto');
     assert.strictEqual(video.controls, true);
     assert.strictEqual(video.getAttribute('controlslist'), 'nodownload');
     assert.strictEqual(video.getAttribute('data-annoto-zoodle'), 'oN0AsNdhRu11Nov04');
@@ -93,6 +95,21 @@ test('replaces the iframe with a native video keeping its sizing', () => {
         video.querySelector('source').getAttribute('src'),
         'https://zoodle.macam.ac.il/qsm/files/oN0AsNdhRu11Nov04.mp4'
     );
+});
+
+test('drops the iframe crop styles so the video and widget match the visible frame', () => {
+    document.body.innerHTML = `
+        <div class="no-overflow">
+            <iframe src="https://zoodle.macam.ac.il//qsm/media/oN0AsNdhRu11Nov04"
+                style="position:relative; top:-205px; width:100%; height:900px; border:none;"></iframe>
+        </div>`;
+    replaceZoodleIframes(document.querySelectorAll('iframe'));
+    const video = document.querySelector('.no-overflow > video');
+    assert.strictEqual(video.style.top, '', 'negative top removed');
+    assert.strictEqual(video.style.position, '', 'relative offset removed');
+    assert.strictEqual(video.style.height, 'auto');
+    assert.strictEqual(video.style.width, '100%', 'author width kept');
+    assert.strictEqual(video.style.maxWidth, '100%');
 });
 
 test('is idempotent and scoped to the container', () => {
