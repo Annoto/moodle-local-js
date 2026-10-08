@@ -22,7 +22,8 @@ const { outputText } = ts.transpileModule(source, {
 });
 const mod = { exports: {} };
 new Function('module', 'exports', outputText)(mod, mod.exports); // eslint-disable-line no-new-func
-const { parseZoodleSrc, replaceZoodleIframes } = mod.exports;
+const { parseZoodleSrc, replaceZoodleIframes, ZOODLE_IFRAME_SELECTOR } = mod.exports;
+const iframesIn = (root) => root.querySelectorAll(ZOODLE_IFRAME_SELECTOR);
 
 let failures = 0;
 const test = (name, fn) => {
@@ -77,7 +78,7 @@ test('replaces the iframe with a native video keeping its sizing', () => {
                 width="640" height="360" style="width: 100%; height: 450px;" allowfullscreen></iframe>
             <iframe src="https://www.youtube.com/embed/abc"></iframe>
         </div>`;
-    const replaced = replaceZoodleIframes(document.body);
+    const replaced = replaceZoodleIframes(document.querySelectorAll('iframe'));
     assert.strictEqual(replaced, 1);
     assert.strictEqual(document.querySelectorAll('iframe').length, 1, 'youtube iframe untouched');
     const video = document.querySelector('.no-overflow > video');
@@ -98,11 +99,27 @@ test('is idempotent and scoped to the container', () => {
     document.body.innerHTML = `
         <section id="a"><iframe src="https://zoodle.macam.ac.il/qsm/media/A1"></iframe></section>
         <section id="b"><iframe src="https://zoodle.macam.ac.il/qsm/media/B1"></iframe></section>`;
-    assert.strictEqual(replaceZoodleIframes(document.getElementById('a')), 1);
-    assert.strictEqual(replaceZoodleIframes(document.getElementById('a')), 0);
+    assert.strictEqual(replaceZoodleIframes(iframesIn(document.getElementById('a'))), 1);
+    assert.strictEqual(replaceZoodleIframes(iframesIn(document.getElementById('a'))), 0);
     assert.ok(document.querySelector('#b iframe'), 'other container untouched');
-    assert.strictEqual(replaceZoodleIframes(document.body), 1);
+    assert.strictEqual(replaceZoodleIframes(iframesIn(document.body)), 1);
     assert.strictEqual(document.querySelectorAll('video').length, 2);
+});
+
+test('takes any array-like of iframes and skips non Zoodle ones (no DOM lookups of its own)', () => {
+    document.body.innerHTML = `
+        <iframe src="https://www.youtube.com/embed/abc"></iframe>
+        <iframe src="https://zoodle.macam.ac.il/qsm/media/Z9"></iframe>`;
+    assert.strictEqual(replaceZoodleIframes([]), 0);
+    assert.strictEqual(replaceZoodleIframes(Array.from(document.querySelectorAll('iframe'))), 1);
+    assert.strictEqual(document.querySelector('iframe').getAttribute('src'), 'https://www.youtube.com/embed/abc');
+    assert.ok(document.querySelector('video[data-annoto-zoodle="Z9"]'));
+});
+
+test('selector is a loose pre-filter only; the parser is the real gate', () => {
+    document.body.innerHTML = `<iframe src="https://evilzoodle.macam.ac.il/qsm/media/abc"></iframe>`;
+    assert.strictEqual(iframesIn(document.body).length, 1, 'matched by the loose selector');
+    assert.strictEqual(replaceZoodleIframes(iframesIn(document.body)), 0, 'but rejected by the parser');
 });
 
 if (failures) {

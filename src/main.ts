@@ -30,7 +30,7 @@ import {
 } from './interfaces';
 import { debounce, escapeHtml, generatePlayerId, parseMoodleVersion } from './util';
 import { AnnotoMoodleTiles } from './formats/tiles';
-import { replaceZoodleIframes } from './players/zoodle';
+import { replaceZoodleIframes, ZOODLE_IFRAME_SELECTOR } from './players/zoodle';
 
 export { IMoodleJsParams } from './interfaces';
 
@@ -479,8 +479,10 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         log.info('AnnotoMoodle: detecting player');
         const parent = container || document.body;
         // Zoodle recordings are cross-origin iframes with no player API: swap them for a native
-        // <video> first so the html5 detection below can attach to them.
-        replaceZoodleIframes(parent, log);
+        // <video> first so the html5 detection below can attach to them. Look them up with jQuery
+        // like every selector below: `parent` is not always an element (the document ready callback
+        // passes the jQuery function itself), and jQuery tolerates that where the DOM API throws.
+        replaceZoodleIframes($(parent).find(ZOODLE_IFRAME_SELECTOR).get() as HTMLIFrameElement[], log);
         const h5p = $(parent).find('iframe.h5p-iframe').first().get(0);
         const youtube = $(parent).find('iframe[src*="youtube.com"]').first().get(0);
         const vimeo = $(parent).find('iframe[src*="vimeo.com"]').first().get(0);
