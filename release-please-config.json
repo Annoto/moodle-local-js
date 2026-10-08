@@ -1,5 +1,6 @@
 {
     "release-type": "node",
+    "last-release-sha": "5a71ae62f9ecc6155af47c899d7e83f0c93f4f9f",
     "draft": false,
     "prerelease": false,
     "skip-github-release": false,
