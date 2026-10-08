@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/Annoto/moodle-local-js/compare/v1.3.7...v1.4.0) (2026-10-08)
+
+
+### Features
+
+* support Zoodle (zoodle.macam.ac.il) recording embeds ([747b85e](https://github.com/Annoto/moodle-local-js/commit/747b85e0c0018a4028e969ea276d4e41fab01f1d), [8aea9c1](https://github.com/Annoto/moodle-local-js/commit/8aea9c19e514d874b8afcbb942453a9e331e031e))
+
 ## [1.3.7](https://github.com/Annoto/moodle-local-js/compare/v1.3.6...v1.3.7) (2026-09-22)
 
 
