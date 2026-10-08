@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.9](https://github.com/Annoto/moodle-local-js/compare/v1.3.8...v1.3.9) (2026-10-08)
+
+
+### Bug Fixes
+
+* **zoodle:** keep the widget aligned with the video and sized to its frame ([2c4109b](https://github.com/Annoto/moodle-local-js/commit/2c4109b8fb2bcdd1fcd5357c20c923ca3987102f))
+* **zoodle:** keep the widget aligned with the video and sized to its frame ([dea52c3](https://github.com/Annoto/moodle-local-js/commit/dea52c3baf15b0bf217fbea8e5cb1ab444fec0b8))
+
 ## [1.3.8](https://github.com/Annoto/moodle-local-js/compare/v1.3.7...v1.3.8) (2026-10-08)
 
 
