@@ -22,6 +22,7 @@
     "watch": "webpack --progress --color --watch --env envName=dev",
     "lint": "eslint \"src/**/*.ts\" --color",
     "test:kaltura-v7": "node test/kaltura-v7-plugin-contract.js",
+    "test:zoodle": "node test/zoodle-replace.js",
     "prettier:fix": "prettier --write ."
   },
   "dependencies": {
