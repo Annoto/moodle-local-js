@@ -14,6 +14,8 @@ const ZOODLE_HOST_RE = /(^|\.)zoodle\.macam\.ac\.il$/i;
 // tolerate the double slash Zoodle emits (`//qsm/media/<id>`) and an optional trailing slash
 const ZOODLE_MEDIA_PATH_RE = /^\/+([\w-]+)\/media\/([\w-]+)\/?$/;
 const ZOODLE_MARKER_ATTR = 'data-annoto-zoodle';
+// coarse pre-filter for the caller's lookup; parseZoodleSrc does the real host/path check
+export const ZOODLE_IFRAME_SELECTOR = 'iframe[src*="zoodle."]';
 
 export interface IZoodleMedia {
     origin: string;
@@ -83,19 +85,27 @@ export const createZoodleVideo = (
 };
 
 /**
- * Replace Zoodle iframes under `parent` with native <video> elements.
+ * Replace the given Zoodle iframes with native <video> elements. Iframes that are not Zoodle embeds
+ * are left alone, so the caller can pass a loose selector match.
+ *
+ * Takes the elements rather than a root node on purpose: `findPlayer` resolves its scope with
+ * jQuery (`$(parent).find(...)`) because `parent` is not always an element - jQuery's document
+ * ready callback hands it the jQuery function itself - and the native `querySelectorAll` on it
+ * threw and killed player detection for every page (1.4.0).
+ *
  * Idempotent: a replaced iframe is gone from the DOM, so repeated calls are no-ops.
  * @returns number of iframes replaced
  */
 export const replaceZoodleIframes = (
-    parent: HTMLElement,
+    iframes: ArrayLike<HTMLIFrameElement>,
     log?: { info: (msg: string) => void; warn: (msg: string) => void }
 ): number => {
     let replaced = 0;
-    parent.querySelectorAll<HTMLIFrameElement>('iframe[src*="zoodle."]').forEach((iframeEl) => {
+    for (let i = 0; i < iframes.length; i += 1) {
+        const iframeEl = iframes[i];
         const media = parseZoodleSrc(iframeEl.getAttribute('src'));
         if (!media) {
-            return;
+            continue; // eslint-disable-line no-continue
         }
         try {
             const video = createZoodleVideo(iframeEl, media);
@@ -105,6 +115,6 @@ export const replaceZoodleIframes = (
         } catch (err) {
             log?.warn(`AnnotoMoodle: failed to replace Zoodle iframe ${media.mediaId}: ${err}`);
         }
-    });
+    }
     return replaced;
 };
