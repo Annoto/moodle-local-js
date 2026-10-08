@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.8](https://github.com/Annoto/moodle-local-js/compare/v1.3.7...v1.3.8) (2026-10-08)
+
+
+### Features
+
+* support Zoodle (zoodle.macam.ac.il) recording embeds ([747b85e](https://github.com/Annoto/moodle-local-js/commit/747b85e0c0018a4028e969ea276d4e41fab01f1d), [8aea9c1](https://github.com/Annoto/moodle-local-js/commit/8aea9c19e514d874b8afcbb942453a9e331e031e))
+
+
+### Bug Fixes
+
+* player detection crashed on every page since 1.4.0 ([8cdf0bd](https://github.com/Annoto/moodle-local-js/commit/8cdf0bd673b517e87bceb80b46b1c10da6fee87a))
+
 ## [1.3.7](https://github.com/Annoto/moodle-local-js/compare/v1.3.6...v1.3.7) (2026-09-22)
 
 
