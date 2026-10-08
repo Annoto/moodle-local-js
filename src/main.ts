@@ -30,6 +30,7 @@ import {
 } from './interfaces';
 import { debounce, escapeHtml, generatePlayerId, parseMoodleVersion } from './util';
 import { AnnotoMoodleTiles } from './formats/tiles';
+import { replaceZoodleIframes } from './players/zoodle';
 
 export { IMoodleJsParams } from './interfaces';
 
@@ -477,6 +478,9 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     findPlayer(container?: HTMLElement | null): IPlayerParams | undefined {
         log.info('AnnotoMoodle: detecting player');
         const parent = container || document.body;
+        // Zoodle recordings are cross-origin iframes with no player API: swap them for a native
+        // <video> first so the html5 detection below can attach to them.
+        replaceZoodleIframes(parent, log);
         const h5p = $(parent).find('iframe.h5p-iframe').first().get(0);
         const youtube = $(parent).find('iframe[src*="youtube.com"]').first().get(0);
         const vimeo = $(parent).find('iframe[src*="vimeo.com"]').first().get(0);
