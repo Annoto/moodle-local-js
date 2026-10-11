@@ -82,8 +82,13 @@ export class AnnotoMoodleTiles {
                 });
             });
 
-            if (main.widgetPlayer?.playerElement?.offsetParent) {
-                // will make sure widget is properly loaded or destroyed for detached player element
+            if (this.tileOpen || this.modalOpen || main.widgetPlayer?.playerElement?.offsetParent) {
+                // A tile (or modal) that is already open at init produces no class change, so neither
+                // the observer nor the failsafe below would ever run player detection for it. This
+                // happens when format_tiles restores the last opened tile from localStorage
+                // (mdl-tiles-course-<id>-user-<id>-lastSecId) before this script loads, and is why
+                // the widget only appeared in a fresh (incognito) browser.
+                // Also makes sure the widget is properly loaded or destroyed for a detached player element.
                 this.mutationHandle();
             }
 

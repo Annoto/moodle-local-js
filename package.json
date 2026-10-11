@@ -23,6 +23,7 @@
     "lint": "eslint \"src/**/*.ts\" --color",
     "test:kaltura-v7": "node test/kaltura-v7-plugin-contract.js",
     "test:zoodle": "node test/zoodle-replace.js",
+    "test:tiles": "node test/tiles-init.js",
     "prettier:fix": "prettier --write ."
   },
   "dependencies": {
