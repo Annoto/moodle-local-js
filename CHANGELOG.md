@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.10](https://github.com/Annoto/moodle-local-js/compare/v1.3.9...v1.3.10) (2026-10-12)
+
+
+### Bug Fixes
+
+* **tiles:** detect players added or replaced in an open tile ([9474262](https://github.com/Annoto/moodle-local-js/commit/9474262bf1b3340b7c46fcf8e8edf5cee4644b77)), closes [#38](https://github.com/Annoto/moodle-local-js/issues/38)
+* **tiles:** load widget when a tile is already open at init ([a92ea9d](https://github.com/Annoto/moodle-local-js/commit/a92ea9d9bcaa95c49729d30c10b88613b1aae73e)), closes [#36](https://github.com/Annoto/moodle-local-js/issues/36)
+
 ## [1.3.9](https://github.com/Annoto/moodle-local-js/compare/v1.3.8...v1.3.9) (2026-10-08)
 
 
