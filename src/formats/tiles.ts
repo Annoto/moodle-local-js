@@ -9,6 +9,7 @@ export class AnnotoMoodleTiles {
     private static tileOpen = false;
     private static modalOpen = false;
     private static observer?: MutationObserver;
+    private static contentObserver?: MutationObserver;
     private static failsafeTimer?: ReturnType<typeof setInterval>;
 
     private static isTileOpen = (): boolean =>
@@ -31,12 +32,63 @@ export class AnnotoMoodleTiles {
         }
     };
 
+    private static getTilesContainer = (): HTMLElement | null =>
+        $('body.format-tiles #multi_section_tiles').get(0) || null;
+
+    /**
+     * The widget player is missing or no longer inside the tiles container
+     * (format_tiles replaced the tile content), so detection must run again.
+     */
+    private static needsPlayerDetection = (container: HTMLElement): boolean => {
+        const activeEl = this.main.widgetPlayer?.playerElement;
+        return !activeEl || !container.contains(activeEl);
+    };
+
+    /**
+     * format_tiles (JS navigation) loads and replaces the open tile content over AJAX after the
+     * tile is marked open, so a player can appear or be replaced without any class change.
+     */
+    private static contentHandle = (): void => {
+        if (!this.tileOpen || this.modalOpen) {
+            return;
+        }
+        const container = this.getTilesContainer();
+        if (!container || !this.needsPlayerDetection(container)) {
+            return;
+        }
+        const { main } = this;
+        const hadPlayer = !!main.widgetPlayer;
+        const player = main.findPlayer(container);
+        if (player?.playerElement?.offsetParent) {
+            main.log.info('AnnotoMoodle: tile content changed, load widget');
+            main.moveApp(container);
+            main.bootWidget(container);
+        } else if (hadPlayer) {
+            main.log.info('AnnotoMoodle: tile content changed, player removed');
+            main.destroyWidget();
+        }
+    };
+
+    private static updateContentObserver(): void {
+        const container = this.tileOpen && !this.modalOpen ? this.getTilesContainer() : null;
+        if (!container) {
+            this.contentObserver?.disconnect();
+            return;
+        }
+        if (!this.contentObserver) {
+            this.contentObserver = new MutationObserver(debounce(this.contentHandle, 300));
+        }
+        // observe() on the same target replaces the previous options, so this is idempotent
+        this.contentObserver.observe(container, { childList: true, subtree: true });
+    }
+
     private static async handleStateChange(): Promise<void> {
         const { main } = this;
         const isModalOpen = this.isModalOpen();
         const isModalChanged = this.modalOpen !== isModalOpen;
         this.tileOpen = this.isTileOpen();
         this.modalOpen = isModalOpen;
+        this.updateContentObserver();
         main.log.info('AnnotoMoodle: tile open state changed: ', this.tileOpen, this.modalOpen);
         if (isModalChanged) {
             // wait for modal to be fully opened so player find give correct results
@@ -46,7 +98,7 @@ export class AnnotoMoodleTiles {
         if (this.modalOpen) {
             container = $('.modal.show').get(0);
         } else if (this.tileOpen) {
-            container = $('body.format-tiles #multi_section_tiles').get(0);
+            container = this.getTilesContainer();
         }
         if (container) {
             main.moveApp(container);
@@ -92,10 +144,15 @@ export class AnnotoMoodleTiles {
                 this.mutationHandle();
             }
 
+            this.updateContentObserver();
+
             // failsafe in case of not fired mutation event
             this.failsafeTimer = setInterval(() => {
                 if (this.isTileOpen() !== this.tileOpen || this.isModalOpen() !== this.modalOpen) {
                     this.handleStateChange();
+                } else if (main.widgetPlayer && !main.widgetPlayer.playerElement?.isConnected) {
+                    // tile content was replaced while the widget was still booting
+                    this.contentHandle();
                 }
             }, 1000);
         }
@@ -104,6 +161,8 @@ export class AnnotoMoodleTiles {
     static destroy(): void {
         this.observer?.disconnect();
         this.observer = undefined;
+        this.contentObserver?.disconnect();
+        this.contentObserver = undefined;
         if (this.failsafeTimer !== undefined) {
             clearInterval(this.failsafeTimer);
             this.failsafeTimer = undefined;
