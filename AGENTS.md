@@ -10,16 +10,16 @@ The browser-side TypeScript for the [Annoto Moodle local plugin](https://github.
 
 ## Layout
 
-| Package / folder                       | Role                                                                                                                   | Depends on                                     |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| [src/main.ts](src/main.ts)             | Entry point and the `AnnotoMoodle` class: player discovery, widget boot, SSO, Kaltura V7 repair, completion reporting. | `@annoto/widget-api`, the other `src/` modules |
-| [src/interfaces.ts](src/interfaces.ts) | Types for the params the Moodle plugin hands over and the player, widget and completion shapes.                        | `@annoto/widget-api`                           |
-| [src/constants.ts](src/constants.ts)   | Build-time env (`version`, `ENV`, `name`) injected by webpack's `DefinePlugin`.                                        | —                                              |
-| [src/util.ts](src/util.ts)             | Small pure helpers: Moodle version parsing, debounce, HTML escaping, player ids, delay.                                | `src/interfaces.ts`                            |
-| [src/formats/](src/formats/)           | Course-format specific behaviour (`tiles.ts`: format_tiles tile open/close and AJAX-loaded content).                   | `src/interfaces.ts`, `src/util.ts`             |
-| [src/players/](src/players/)           | Player-specific adapters (`zoodle.ts`: swaps a Zoodle iframe for a native `<video>` the HTML5 detection picks up).     | —                                              |
-| [test/](test/)                         | Plain Node test scripts: the Kaltura V7 playkit plugin contract, the Zoodle swap, the Tiles init.                      | `jsdom`, `typescript`                          |
-| `webpack.*.js`                         | Build per env (`dev`, `staging`, `prod`) into `dist/annoto.js`.                                                        | `webpack`, `ts-loader`                         |
+| Package / folder                       | Role                                                                                                                            | Depends on                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| [src/main.ts](src/main.ts)             | Entry point and the `AnnotoMoodle` class: player discovery, widget boot, SSO, Kaltura V7 repair, completion reporting.          | `@annoto/widget-api`, the other `src/` modules  |
+| [src/interfaces.ts](src/interfaces.ts) | Types for the params the Moodle plugin hands over and the player, widget and completion shapes.                                 | `@annoto/widget-api`                            |
+| [src/constants.ts](src/constants.ts)   | Build-time env (`version`, `ENV`, `name`) injected by webpack's `DefinePlugin`.                                                 | —                                               |
+| [src/util.ts](src/util.ts)             | Small pure helpers: Moodle version parsing, debounce, HTML escaping, player ids, delay, course page completion.                 | `src/interfaces.ts`, `@annoto/widget-api` types |
+| [src/formats/](src/formats/)           | Course-format specific behaviour (`tiles.ts`: format_tiles tile open/close and AJAX-loaded content).                            | `src/interfaces.ts`, `src/util.ts`              |
+| [src/players/](src/players/)           | Player-specific adapters (`zoodle.ts`: swaps a Zoodle iframe for a native `<video>` the HTML5 detection picks up).              | —                                               |
+| [test/](test/)                         | Plain Node test scripts: the Kaltura V7 playkit plugin contract, the Zoodle swap, the Tiles init, the label completion helpers. | `jsdom`, `typescript`                           |
+| `webpack.*.js`                         | Build per env (`dev`, `staging`, `prod`) into `dist/annoto.js`.                                                                 | `webpack`, `ts-loader`                          |
 
 `src/main.ts` is the only module that imports the others. Modules under `src/formats/` and `src/players/` import only `src/util.ts` and `src/interfaces.ts` — never `main.ts` or each other. A cross-cutting helper goes in `src/util.ts`, a shared type in `src/interfaces.ts`.
 
@@ -66,9 +66,10 @@ Rules live in `AGENTS.md` files, never only in a doc: a doc may explain a rule, 
 | `npm run test:kaltura-v7`                        | Contract test against the published playkit plugin (downloads it; `PLUGIN_BUNDLE=<path>` runs offline against a local copy). |
 | `npm run test:zoodle`                            | Unit test for the Zoodle iframe swap in [src/players/zoodle.ts](src/players/zoodle.ts).                                      |
 | `npm run test:tiles`                             | Unit test for the format_tiles integration in [src/formats/tiles.ts](src/formats/tiles.ts).                                  |
+| `npm run test:label-completion`                  | Unit test for the course page (label) completion helpers in [src/util.ts](src/util.ts).                                      |
 | `npm run prettier:fix`                           | Prettier over the whole repo.                                                                                                |
 
-`npm run build` is the aggregate check. It runs no test script: run `npm run test:kaltura-v7`, `npm run test:zoodle` and `npm run test:tiles` before reporting a PR ready, and the Kaltura one whenever the V7 path in [src/main.ts](src/main.ts) changes. ESLint runs with `eslint-plugin-only-warn`, so lint findings print as warnings and never fail the build — read the lint output rather than trusting the exit status. `npm run test:kaltura-v7` exits 0 with a `SKIP:` line when `jsdom` is not installed; a skip is not a pass. The build skips any run in a real Moodle site: before releasing a change to player discovery or a course format, load the staging bundle on a Moodle site with that player or format (e.g. Kaltura V7, Zoodle, Tiles) and confirm the widget boots.
+`npm run build` is the aggregate check. It runs no test script: run `npm run test:kaltura-v7`, `npm run test:zoodle`, `npm run test:tiles` and `npm run test:label-completion` before reporting a PR ready, and the Kaltura one whenever the V7 path in [src/main.ts](src/main.ts) changes. ESLint runs with `eslint-plugin-only-warn`, so lint findings print as warnings and never fail the build — read the lint output rather than trusting the exit status. `npm run test:kaltura-v7` exits 0 with a `SKIP:` line when `jsdom` is not installed; a skip is not a pass. The build skips any run in a real Moodle site: before releasing a change to player discovery or a course format, load the staging bundle on a Moodle site with that player or format (e.g. Kaltura V7, Zoodle, Tiles) and confirm the widget boots.
 
 ---
 

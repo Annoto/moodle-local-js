@@ -14,6 +14,7 @@ import {
 } from '@annoto/widget-api';
 import { BUILD_ENV } from './constants';
 import {
+    IActivityCompletionRequirements,
     IAnnotoMoodleMain,
     IKalturaKdp,
     IKalturaV7Player,
@@ -28,7 +29,16 @@ import {
     KalturaV7PlayersMapType,
     MoodlePageFormatType,
 } from './interfaces';
-import { debounce, escapeHtml, generatePlayerId, parseMoodleVersion } from './util';
+import {
+    cmCompletionInfoEl,
+    debounce,
+    escapeHtml,
+    findCmId,
+    generatePlayerId,
+    isActivityCompletionMet,
+    parseMoodleVersion,
+    parseUserActivity,
+} from './util';
 import { AnnotoMoodleTiles } from './formats/tiles';
 import { replaceZoodleIframes, ZOODLE_IFRAME_SELECTOR } from './players/zoodle';
 
@@ -79,6 +89,8 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     kalturaV7SweepTicks = 0;
     readonly log: typeof log = log;
     myActivityResponse?: IMyActivity;
+    /** my_activity reported for each label on the course page, by cmid. */
+    cmActivityResponses: Record<string, IMyActivity> = {};
     trPromise?: Promise<IMoodleTr>;
     appEl!: HTMLElement;
     appContainer!: HTMLElement;
@@ -239,16 +251,21 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         if (myActivityResponse) {
             return myActivityResponse;
         }
-        const data = activityCompletionReq?.user_data?.data;
-        if (!data) {
-            return undefined;
-        }
-        try {
-            return JSON.parse(data);
-        } catch (err) {
-            log.error(`AnnotoMoodle: failed to parse my_activity user_data: ${err}`);
-            return undefined;
-        }
+        return parseUserActivity(activityCompletionReq, log);
+    }
+
+    get cmCompletions(): IActivityCompletionRequirements[] {
+        return this.params.cmCompletions || [];
+    }
+
+    /** Completion of the course page label the widget is loaded on, if it has Annoto completion. */
+    get activeCmCompletion(): IActivityCompletionRequirements | undefined {
+        const cmid = findCmId(this.activePlayer?.playerElement);
+        return cmid ? this.cmCompletions.find((req) => `${req.cmid}` === cmid) : undefined;
+    }
+
+    get hasCompletionTracking(): boolean {
+        return !!this.params.activityCompletionEnabled || this.cmCompletions.length > 0;
     }
 
     get completionInfoEl(): HTMLElement | null {
@@ -266,18 +283,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             return true;
         }
 
-        if (enabled && !myActivity) {
-            return false;
-        }
-        const totalView = +req.totalview;
-        const comments = +req.comments;
-        const replies = +req.replies;
-        const emptyReq = totalView <= 0 && comments <= 0 && replies <= 0;
-        const viewCompleted = totalView === 0 || (myActivity && totalView <= myActivity.completion);
-        const commentsCompleted = comments === 0 || (myActivity && comments <= myActivity.comments);
-        const repliesCompleted = replies === 0 || (myActivity && replies <= myActivity.replies);
-
-        return !!(emptyReq || (viewCompleted && commentsCompleted && repliesCompleted));
+        return isActivityCompletionMet(req, myActivity);
     }
 
     get isModerator(): boolean {
@@ -638,12 +644,11 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     annotoReady(api: IAnnotoApi): void {
-        const { params, canCompleteActivity } = this;
-        const { activityCompletionEnabled } = params;
+        const { hasCompletionTracking, canCompleteActivity } = this;
         this.isloaded = true;
         this.annotoAPI = api;
         log.info('AnnotoMoodle: widget ready');
-        if (activityCompletionEnabled && canCompleteActivity) {
+        if (hasCompletionTracking && canCompleteActivity) {
             Annoto.on(`my_activity`, this.myActivityHandle);
         }
 
@@ -1392,7 +1397,8 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     async updateCompletionStatus(): Promise<void> {
-        const { params, isActivityCompleted, myActivity, canCompleteActivity } = this;
+        const { params, isActivityCompleted, myActivity, canCompleteActivity, cmCompletions } =
+            this;
         const { activityCompletionEnabled, activityCompletionReq } = params;
 
         log.info(
@@ -1402,19 +1408,42 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                 completionInfoEl: !!this.completionInfoEl,
                 activityCompletionReq: !!activityCompletionReq,
                 myActivity: !!myActivity,
+                cmCompletions: cmCompletions.length,
             })}`
         );
 
-        if (!activityCompletionEnabled) {
-            return;
+        if (activityCompletionEnabled) {
+            this.addCompletionInfoSectionIfMissing();
+            const { completionInfoEl } = this;
+            if (completionInfoEl) {
+                await this.renderCompletionInfo(
+                    completionInfoEl,
+                    activityCompletionReq,
+                    myActivity,
+                    isActivityCompleted
+                );
+            }
         }
 
-        this.addCompletionInfoSectionIfMissing();
-        const { completionInfoEl } = this;
-        if (!completionInfoEl) {
-            return;
+        for (const req of cmCompletions) {
+            const cmid = `${req.cmid}`;
+            const infoEl = cmCompletionInfoEl(cmid);
+            if (infoEl) {
+                const cmActivity = this.cmActivityResponses[cmid] || parseUserActivity(req, log);
+                const isCompleted = canCompleteActivity && isActivityCompletionMet(req, cmActivity);
+                // eslint-disable-next-line no-await-in-loop
+                await this.renderCompletionInfo(infoEl, req, cmActivity, isCompleted);
+            }
         }
+    }
 
+    async renderCompletionInfo(
+        completionInfoEl: HTMLElement,
+        activityCompletionReq: IActivityCompletionRequirements | undefined,
+        myActivity: IMyActivity | undefined,
+        isActivityCompleted: boolean
+    ): Promise<void> {
+        const { canCompleteActivity } = this;
         const requirementLabel = await this.getString(
             'overallaggregation',
             'completion',
@@ -1500,10 +1529,15 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
 
     myActivityHandle = (data: IMyActivity): void => {
         const { params, canCompleteActivity } = this;
-        const { activityCompletionEnabled, cmid } = params;
+        const { activityCompletionEnabled } = params;
         log.info(`AnnotoMoodle: got my_activity event`);
 
-        if (!activityCompletionEnabled || !cmid || !moodleAnnoto.Ajax || !canCompleteActivity) {
+        // On the course page the activity is the label the widget is loaded on.
+        const cmCompletion = activityCompletionEnabled ? undefined : this.activeCmCompletion;
+        const cmid = activityCompletionEnabled
+            ? params.cmid
+            : cmCompletion && `${cmCompletion.cmid}`;
+        if (!cmid || !moodleAnnoto.Ajax || !canCompleteActivity) {
             log.warn('AnnotoMoodle: skip my_activity handling, activity completion not supported');
             return;
         }
@@ -1514,7 +1548,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                 args: {
                     data: JSON.stringify({
                         ...data,
-                        cmid: this.params.cmid,
+                        cmid,
                     }),
                 },
                 done: (result: IMoodleCompletionPostResponse): void => {
@@ -1522,7 +1556,11 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                         `AnnotoMoodle: completion result (${result?.status}): ${result?.message}`
                     );
                     if (result?.status) {
-                        this.myActivityResponse = data;
+                        if (cmCompletion) {
+                            this.cmActivityResponses[cmid] = data;
+                        } else {
+                            this.myActivityResponse = data;
+                        }
                         this.updateCompletionStatus();
                     }
                 },
