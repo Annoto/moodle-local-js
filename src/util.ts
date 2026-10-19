@@ -37,3 +37,61 @@ export const delay = (ms: number): Promise<void> =>
     new Promise((resolve) => {
         setTimeout(resolve, ms);
     });
+
+/**
+ * Whether the element has a box on the page. False under a `display: none` ancestor (a closed
+ * Grid popup, a collapsed section, an inactive tab), where the widget would be drawn at 0,0.
+ */
+export const isRendered = (el?: Element | null): boolean =>
+    !!el && el.isConnected && el.getClientRects().length > 0;
+
+const SCROLLING_OVERFLOW = /^(auto|scroll|overlay)$/;
+
+/**
+ * The outermost ancestor of `el`, below `<body>`, that scrolls its own content vertically - the
+ * page scroller of themes that scroll inside a layout element (Boost Union scrolls #page-wrapper)
+ * instead of the window. The outermost one, so a small `.no-overflow` box around the player is not
+ * mistaken for it. Null when the window scrolls the page, or when `el` is inside a fixed element
+ * (a modal), which does not move with the page scroller.
+ */
+export const findPageScroller = (el: Element): HTMLElement | null => {
+    const { body, documentElement, defaultView } = el.ownerDocument;
+    let scroller: HTMLElement | null = null;
+    for (
+        let node = el.parentElement;
+        node && node !== body && node !== documentElement;
+        node = node.parentElement
+    ) {
+        const style = defaultView?.getComputedStyle(node);
+        if (style?.position === 'fixed') {
+            return null;
+        }
+        if (
+            style &&
+            SCROLLING_OVERFLOW.test(style.overflowY) &&
+            node.scrollHeight > node.clientHeight
+        ) {
+            scroller = node;
+        }
+    }
+    return scroller;
+};
+
+export interface IPlayerCandidates<TType> {
+    type: TType;
+    elements: HTMLElement[];
+}
+
+/**
+ * Pick the player to attach the widget to from candidates in priority order: the first rendered
+ * one, so a player in a closed popup or collapsed section does not win over one on screen; else
+ * the first one, so the widget still boots and can follow it once it is shown.
+ */
+export const pickPlayer = <TType>(
+    candidates: IPlayerCandidates<TType>[]
+): { type: TType; element: HTMLElement } | undefined => {
+    const all = candidates.flatMap(({ type, elements }) =>
+        elements.map((element) => ({ type, element }))
+    );
+    return all.find(({ element }) => isRendered(element)) || all[0];
+};
