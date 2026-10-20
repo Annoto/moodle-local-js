@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.11](https://github.com/Annoto/moodle-local-js/compare/v1.3.10...v1.3.11) (2026-10-20)
+
+
+### Bug Fixes
+
+* keep the widget on its player when the theme scrolls a layout element or the player is hidden ([8d1e831](https://github.com/Annoto/moodle-local-js/commit/8d1e83112c9da87659f08e9b68bd3039e4fc0097))
+* keep the widget on its player when the theme scrolls a layout element or the player is hidden ([4b89355](https://github.com/Annoto/moodle-local-js/commit/4b89355019757a2a7ad8bd83651e556180bacb68))
+
 ## [1.3.10](https://github.com/Annoto/moodle-local-js/compare/v1.3.9...v1.3.10) (2026-10-12)
 
 
