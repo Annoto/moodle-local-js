@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.12](https://github.com/Annoto/moodle-local-js/compare/v1.3.11...v1.3.12) (2026-10-20)
+
+
+### Bug Fixes
+
+* **grid:** keep the widget on its player in the format_grid section popup ([dd81e67](https://github.com/Annoto/moodle-local-js/commit/dd81e67b27b2cf01d0daf580350728b3dfe95493))
+* **grid:** keep the widget on its player in the format_grid section popup ([45bc576](https://github.com/Annoto/moodle-local-js/commit/45bc576ade3686d5c33fc964a9e1ea86d54ccd7c)), closes [#46](https://github.com/Annoto/moodle-local-js/issues/46)
+
 ## [1.3.11](https://github.com/Annoto/moodle-local-js/compare/v1.3.10...v1.3.11) (2026-10-20)
 
 
