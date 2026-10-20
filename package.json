@@ -24,7 +24,8 @@
     "test:kaltura-v7": "node test/kaltura-v7-plugin-contract.js",
     "test:zoodle": "node test/zoodle-replace.js",
     "test:tiles": "node test/tiles-init.js",
-    "prettier:fix": "prettier --write ."
+    "prettier:fix": "prettier --write .",
+    "test:layout": "node test/layout.js"
   },
   "dependencies": {
     "@annoto/widget-api": "^3.35.0"
