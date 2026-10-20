@@ -39,6 +39,7 @@ import {
     pickPlayer,
 } from './util';
 import { AnnotoMoodleTiles } from './formats/tiles';
+import { AnnotoMoodleGridPopup } from './formats/grid-popup';
 import { replaceZoodleIframes, ZOODLE_IFRAME_SELECTOR } from './players/zoodle';
 
 export { IMoodleJsParams } from './interfaces';
@@ -93,6 +94,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     trPromise?: Promise<IMoodleTr>;
     appEl!: HTMLElement;
     appContainer!: HTMLElement;
+    playerScope?: HTMLElement;
 
     setup(params: IMoodleJsParams): void {
         if (this.isSetup) {
@@ -122,6 +124,8 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             default:
                 break;
         }
+        // keyed on the popup itself: format_grid 4.x is detected as 'plain' (no M.format_grid)
+        AnnotoMoodleGridPopup.init(this);
 
         this.kalturaInit();
         this.kalturaV7Init();
@@ -489,7 +493,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
 
     findPlayer(container?: HTMLElement | null): IPlayerParams | undefined {
         log.info('AnnotoMoodle: detecting player');
-        const parent = container || document.body;
+        const parent = container || this.playerScope || document.body;
         // Zoodle recordings are cross-origin iframes with no player API: swap them for a native
         // <video> first so the html5 detection below can attach to them. Look them up with jQuery
         // like every selector below: `parent` is not always an element (the document ready callback
