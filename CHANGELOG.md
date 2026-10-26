@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.13](https://github.com/Annoto/moodle-local-js/compare/v1.3.12...v1.3.13) (2026-10-26)
+
+
+### Bug Fixes
+
+* **completion:** track Annoto completion of labels on the course page ([efaa00d](https://github.com/Annoto/moodle-local-js/commit/efaa00dfc6d003100c636c7bdc4c47034f19a8ff))
+
 ## [1.3.12](https://github.com/Annoto/moodle-local-js/compare/v1.3.11...v1.3.12) (2026-10-20)
 
 
