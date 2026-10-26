@@ -17,6 +17,11 @@ export interface IMoodleJsParams {
     cmid?: string;
     activityCompletionEnabled?: boolean;
     activityCompletionReq?: IActivityCompletionRequirements;
+    /**
+     * Course page only: Annoto completion of the labels on it, which have no page of their own.
+     * Sent by plugin releases that support label completion; absent on older ones.
+     */
+    cmCompletions?: IActivityCompletionRequirements[];
     userScope?: 'user' | 'super-mod';
     userIsEnrolled?: boolean;
 }

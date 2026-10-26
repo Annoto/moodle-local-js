@@ -24,6 +24,7 @@
     "test:kaltura-v7": "node test/kaltura-v7-plugin-contract.js",
     "test:zoodle": "node test/zoodle-replace.js",
     "test:tiles": "node test/tiles-init.js",
+    "test:label-completion": "node test/label-completion.js",
     "prettier:fix": "prettier --write .",
     "test:layout": "node test/layout.js",
     "test:grid": "node test/grid-popup.js"
