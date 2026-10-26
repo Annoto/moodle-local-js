@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.14](https://github.com/Annoto/moodle-local-js/compare/v1.3.13...v1.3.14) (2026-10-26)
+
+
+### Bug Fixes
+
+* **completion:** show Annoto completion on the course page for every activity type ([350889b](https://github.com/Annoto/moodle-local-js/commit/350889bd1a6621cd65620fee1847553539df3742))
+* **completion:** show Annoto completion on the course page for every activity type ([d80ceb4](https://github.com/Annoto/moodle-local-js/commit/d80ceb4665267cacd7a43bb21b1730dfa038b8cf))
+
 ## [1.3.13](https://github.com/Annoto/moodle-local-js/compare/v1.3.12...v1.3.13) (2026-10-26)
 
 
