@@ -52,6 +52,15 @@ export interface IAnnotoMoodleMain {
     readonly formatSelectors: Record<MoodlePageFormatType, string[]>;
     readonly widgetPlayer: IPlayerParams | undefined;
     /**
+     * The wrapper of the Annoto app element, moved between containers by `moveApp`
+     */
+    readonly appEl: HTMLElement;
+    /**
+     * Where `findPlayer` looks when given no container (default: the page). Set while a popup
+     * holds the shown players, so a player on the page behind it is not picked.
+     */
+    playerScope?: HTMLElement;
+    /**
      * Bootstrap or load the widget using annoto api
      * @param container
      */

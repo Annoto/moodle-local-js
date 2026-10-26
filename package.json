@@ -1,6 +1,6 @@
 {
   "name": "@annoto/moodle-local-js",
-  "version": "1.3.10",
+  "version": "1.3.12",
   "description": "Annoto Moodle local plugin Javascript",
   "license": "Apache-2.0",
   "author": "Genadi Sokolov [genadi@annoto.net]",
@@ -25,7 +25,9 @@
     "test:zoodle": "node test/zoodle-replace.js",
     "test:tiles": "node test/tiles-init.js",
     "test:label-completion": "node test/label-completion.js",
-    "prettier:fix": "prettier --write ."
+    "prettier:fix": "prettier --write .",
+    "test:layout": "node test/layout.js",
+    "test:grid": "node test/grid-popup.js"
   },
   "dependencies": {
     "@annoto/widget-api": "^3.35.0"

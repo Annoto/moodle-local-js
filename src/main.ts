@@ -34,12 +34,17 @@ import {
     debounce,
     escapeHtml,
     findCmId,
+    findPageScroller,
     generatePlayerId,
+    IPlayerCandidates,
     isActivityCompletionMet,
+    isRendered,
     parseMoodleVersion,
     parseUserActivity,
+    pickPlayer,
 } from './util';
 import { AnnotoMoodleTiles } from './formats/tiles';
+import { AnnotoMoodleGridPopup } from './formats/grid-popup';
 import { replaceZoodleIframes, ZOODLE_IFRAME_SELECTOR } from './players/zoodle';
 
 export { IMoodleJsParams } from './interfaces';
@@ -59,6 +64,8 @@ const kalturaGlobal = window as unknown as {
 };
 const KALTURA_V7_SWEEP_FAST_TICKS = 50; // 50 x 100ms = 5s
 const KALTURA_V7_SWEEP_TOTAL_TICKS = 105; // + 55 x 1000ms = 60s in total
+// popups and sections animate open; settle before picking the player on screen
+const PLAYER_VISIBILITY_DEBOUNCE_MS = 200;
 const { $ } = moodleAnnoto;
 let { log } = moodleAnnoto;
 
@@ -94,6 +101,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     trPromise?: Promise<IMoodleTr>;
     appEl!: HTMLElement;
     appContainer!: HTMLElement;
+    playerScope?: HTMLElement;
 
     setup(params: IMoodleJsParams): void {
         if (this.isSetup) {
@@ -123,6 +131,8 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             default:
                 break;
         }
+        // keyed on the popup itself: format_grid 4.x is detected as 'plain' (no M.format_grid)
+        AnnotoMoodleGridPopup.init(this);
 
         this.kalturaInit();
         this.kalturaV7Init();
@@ -484,7 +494,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
 
     findPlayer(container?: HTMLElement | null): IPlayerParams | undefined {
         log.info('AnnotoMoodle: detecting player');
-        const parent = container || document.body;
+        const parent = container || this.playerScope || document.body;
         // Zoodle recordings are cross-origin iframes with no player API: swap them for a native
         // <video> first so the html5 detection below can attach to them. Look them up with jQuery
         // like every selector below: `parent` is not always an element (the document ready callback
@@ -498,37 +508,14 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             // that scrolls inside #page (Moodle 4.3+ drawers layout)
             this.applyPageScrollFix(true);
         }
-        const h5p = $(parent).find('iframe.h5p-iframe').first().get(0);
-        const youtube = $(parent).find('iframe[src*="youtube.com"]').first().get(0);
-        const vimeo = $(parent).find('iframe[src*="vimeo.com"]').first().get(0);
-        // Exclude elements owned by a Kaltura V7 (playkit) player: the plugin renders an inline
-        // <video> inside `.kaltura-player-container` and auto-boots the Annoto widget itself, so
-        // the generic bootstrap must not detect and double-boot it ("already running" error).
-        const videojs = $(parent)
-            .find('.video-js')
-            .filter((_: number, el: HTMLElement) => !el.closest('.kaltura-player-container'))
-            .first()
-            .get(0);
-        const jwplayer = $(parent).find('.jwplayer').first().get(0);
-        const wistia = $(parent).find('.wistia_embed:not(iframe)').first().get(0);
-        const html5 = $(parent)
-            .find('video')
-            .filter((_: number, el: HTMLElement) => !el.closest('.kaltura-player-container'))
-            .first()
-            .get(0);
-        let playerElement: HTMLElement;
-        let playerType: PlayerType;
-
-        if (videojs) {
-            playerElement = videojs;
-            playerType = 'videojs';
-        } else if (jwplayer) {
-            playerElement = jwplayer;
-            playerType = 'jw';
-        } else if (h5p) {
-            playerElement = h5p;
-            playerType = 'h5p';
-        } else if (youtube) {
+        const picked = pickPlayer(this.findPlayerCandidates(parent));
+        if (!picked) {
+            log.info('AnnotoMoodle: player not detected');
+            return undefined;
+        }
+        const { type: playerType, element: playerElement } = picked;
+        if (playerType === 'youtube') {
+            const youtube = playerElement as HTMLIFrameElement;
             const youtubeSrc = youtube.src;
             if (youtubeSrc.search(/enablejsapi/i) === -1) {
                 youtube.src =
@@ -536,20 +523,6 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                         ? `${youtubeSrc}?enablejsapi=1`
                         : `${youtubeSrc}&enablejsapi=1`;
             }
-            playerElement = youtube;
-            playerType = 'youtube';
-        } else if (vimeo) {
-            playerElement = vimeo;
-            playerType = 'vimeo';
-        } else if (wistia) {
-            playerElement = wistia;
-            playerType = 'wistia';
-        } else if (html5) {
-            playerElement = html5;
-            playerType = 'html5';
-        } else {
-            log.info('AnnotoMoodle: player not detected');
-            return undefined;
         }
 
         if (!playerElement.id || playerElement.id === '') {
@@ -566,9 +539,116 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         };
     }
 
+    /**
+     * The players under `parent`, in detection priority order.
+     */
+    findPlayerCandidates(parent: HTMLElement): IPlayerCandidates<PlayerType>[] {
+        // Exclude elements owned by a Kaltura V7 (playkit) player: the plugin renders an inline
+        // <video> inside `.kaltura-player-container` and auto-boots the Annoto widget itself, so
+        // the generic bootstrap must not detect and double-boot it ("already running" error).
+        const notKalturaV7 = (_: number, el: HTMLElement): boolean =>
+            !el.closest('.kaltura-player-container');
+        const find = (selector: string): HTMLElement[] => $(parent).find(selector).get();
+        return [
+            { type: 'videojs', elements: $(parent).find('.video-js').filter(notKalturaV7).get() },
+            { type: 'jw', elements: find('.jwplayer') },
+            { type: 'h5p', elements: find('iframe.h5p-iframe') },
+            { type: 'youtube', elements: find('iframe[src*="youtube.com"]') },
+            { type: 'vimeo', elements: find('iframe[src*="vimeo.com"]') },
+            { type: 'wistia', elements: find('.wistia_embed:not(iframe)') },
+            { type: 'html5', elements: $(parent).find('video').filter(notKalturaV7).get() },
+        ];
+    }
+
+    /**
+     * Make the widget's containing block scroll with the player. The widget is drawn in page layout
+     * coordinates inside the absolute #annoto-app, which resolves against the viewport when no
+     * ancestor is positioned. That only matches the player while the window scrolls the page; on
+     * themes that scroll a layout element instead (Boost Union scrolls #page-wrapper) the widget
+     * stays put while the player scrolls away.
+     */
+    fitAppToScrollContext(playerElement: HTMLElement): void {
+        const { appEl } = this;
+        const scroller = findPageScroller(playerElement);
+        if (!scroller) {
+            return;
+        }
+        if (!scroller.contains(appEl)) {
+            if (scroller === this.pageEl) {
+                // #page scrolls (Moodle 4.0 - 4.2 drawers layout, or a theme that keeps it): let
+                // the window scroll instead, the existing fix
+                this.applyPageScrollFix(true);
+            } else {
+                log.warn(
+                    `AnnotoMoodle: page scrolls in ${
+                        scroller.id || scroller.className
+                    }, outside the widget`
+                );
+            }
+            return;
+        }
+        if (getComputedStyle(scroller).position === 'static') {
+            log.info(`AnnotoMoodle: position ${scroller.id || scroller.className} for the widget`);
+            scroller.style.position = 'relative';
+        }
+    }
+
+    /**
+     * Hide the widget while its player has no box (a closed Grid popup, a collapsed section),
+     * where it would be drawn at the page origin.
+     */
+    updateAppVisibility(): void {
+        const { appEl, activePlayer } = this;
+        if (!appEl) {
+            return;
+        }
+        const isVisible = !activePlayer || isRendered(activePlayer.playerElement);
+        const display = isVisible ? '' : 'none';
+        if (appEl.style.display !== display) {
+            log.info(
+                `AnnotoMoodle: ${isVisible ? 'show' : 'hide'} widget, player ${
+                    isVisible ? 'shown' : 'hidden'
+                }`
+            );
+            appEl.style.display = display;
+        }
+    }
+
+    /**
+     * Follow players being shown and hidden, whatever the course format: a player gains or loses
+     * its box when a popup, tab or section opens or closes, which a ResizeObserver reports. Moves
+     * the widget to a player on screen when its own player is hidden.
+     */
+    watchPlayerVisibility(): void {
+        if (typeof ResizeObserver === 'undefined') {
+            return;
+        }
+        const sync = debounce(async () => {
+            const { activePlayer } = this;
+            if (!activePlayer || !isRendered(activePlayer.playerElement)) {
+                const player = this.findPlayer();
+                if (
+                    player &&
+                    player.playerId !== activePlayer?.playerId &&
+                    isRendered(player.playerElement)
+                ) {
+                    log.info(`AnnotoMoodle: player shown: ${player.playerId}`);
+                    await this.loadWidget(player.playerElement.parentElement);
+                }
+            }
+            this.updateAppVisibility();
+        }, PLAYER_VISIBILITY_DEBOUNCE_MS);
+        const observer = new ResizeObserver(sync);
+        this.findPlayerCandidates(document.body)
+            .flatMap(({ elements }) => elements)
+            .forEach((el) => observer.observe(el));
+    }
+
     async prepareConfig(player: IPlayerParams): Promise<void> {
         const { config } = this;
         this.activePlayer = player;
+        this.fitAppToScrollContext(player.playerElement);
+        this.updateAppVisibility();
         const { playerId, playerType, playerElement } = player;
         const nonOverlayTimelinePlayers = ['youtube', 'vimeo'];
         if (this.moodleFormat === 'snap') {
@@ -654,6 +734,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
 
         // TODO: shouldn't this be at setup?
         this.checkWidgetVisibility();
+        this.watchPlayerVisibility();
         // TODO: fix setup flow for multiple players
         this.findMultiplePlayers();
     }
@@ -714,6 +795,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         }
         log.info('AnnotoMoodle: destroy widget');
         this.activePlayer = undefined;
+        this.updateAppVisibility();
         await this.annotoAPI.destroy();
         this.isloaded = false;
     }
