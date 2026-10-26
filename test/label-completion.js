@@ -29,6 +29,9 @@ const dom = new JSDOM(
         ${label(101)}
         ${label(102)}
         <li class="activity modtype_page" id="module-103"><a href="#">page</a></li>
+        <li class="activity activity-wrapper lti modtype_lti" id="module-104">
+          <div data-region="activity-information" class="activity-information"><div data-region="completion-info"></div></div>
+        </li>
     </ul><div id="outside">${VIDEO}</div></body></html>`,
     { url: 'https://moodle.example.com/course/view.php?id=1' }
 );
@@ -41,7 +44,15 @@ const { outputText } = ts.transpileModule(source, {
 });
 const mod = { exports: {} };
 new Function('module', 'exports', outputText)(mod, mod.exports); // eslint-disable-line no-new-func
-const { findCmId, cmCompletionInfoEl, isActivityCompletionMet, parseUserActivity } = mod.exports;
+const {
+    findCmId,
+    cmCompletionInfoEl,
+    isActivityCompletionMet,
+    parseUserActivity,
+    findUnrenderedCmCompletions,
+    isCourseLabelCompletion,
+    CM_COMPLETION_RENDERED_ATTR,
+} = mod.exports;
 
 const req = (overrides = {}) => ({
     id: '1',
@@ -117,6 +128,47 @@ test('parseUserActivity reads the saved progress and tolerates missing or bad da
     assert.strictEqual(errors.length, 0);
     assert.strictEqual(parseUserActivity(req({ user_data: { data: '{bad' } }), logger), undefined);
     assert.strictEqual(errors.length, 1);
+});
+
+test('cmCompletionInfoEl finds the completion area of any activity type', () => {
+    const el = cmCompletionInfoEl('104');
+    assert.ok(el);
+    assert.strictEqual(el.closest('li.activity').id, 'module-104');
+});
+
+test('findUnrenderedCmCompletions lists areas without the indicator, skipping missing areas', () => {
+    const reqs = [
+        req({ cmid: '101' }),
+        req({ cmid: '104' }),
+        req({ cmid: '103' }),
+        req({ cmid: '999' }),
+    ];
+    assert.deepStrictEqual(
+        findUnrenderedCmCompletions(reqs).map((r) => r.cmid),
+        ['101', '104']
+    );
+    cmCompletionInfoEl('104').setAttribute(CM_COMPLETION_RENDERED_ATTR, '104');
+    assert.deepStrictEqual(
+        findUnrenderedCmCompletions(reqs).map((r) => r.cmid),
+        ['101']
+    );
+    // Moodle re-renders the course module: the new area has no marker and is listed again.
+    const li = document.querySelector('#module-104');
+    li.innerHTML =
+        '<div data-region="activity-information"><div data-region="completion-info"></div></div>';
+    assert.deepStrictEqual(
+        findUnrenderedCmCompletions(reqs).map((r) => r.cmid),
+        ['101', '104']
+    );
+});
+
+test('isCourseLabelCompletion counts course page progress only for a label', () => {
+    assert.strictEqual(isCourseLabelCompletion(req({ cmid: '101', modname: 'label' })), true);
+    assert.strictEqual(isCourseLabelCompletion(req({ cmid: '104', modname: 'lti' })), false);
+    assert.strictEqual(isCourseLabelCompletion(req({ cmid: '103', modname: 'page' })), false);
+    // Without a modname (plugin builds that do not send it) the label is told by its class.
+    assert.strictEqual(isCourseLabelCompletion(req({ cmid: '101' })), true);
+    assert.strictEqual(isCourseLabelCompletion(req({ cmid: '104' })), false);
 });
 
 if (failures) {

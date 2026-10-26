@@ -30,14 +30,17 @@ import {
     MoodlePageFormatType,
 } from './interfaces';
 import {
+    CM_COMPLETION_RENDERED_ATTR,
     cmCompletionInfoEl,
     debounce,
     escapeHtml,
     findCmId,
     findPageScroller,
+    findUnrenderedCmCompletions,
     generatePlayerId,
     IPlayerCandidates,
     isActivityCompletionMet,
+    isCourseLabelCompletion,
     isRendered,
     parseMoodleVersion,
     parseUserActivity,
@@ -98,6 +101,9 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     myActivityResponse?: IMyActivity;
     /** my_activity reported for each label on the course page, by cmid. */
     cmActivityResponses: Record<string, IMyActivity> = {};
+    /** A completion status update is rendering; another was asked for meanwhile. */
+    isUpdatingCompletion = false;
+    isCompletionUpdatePending = false;
     trPromise?: Promise<IMoodleTr>;
     appEl!: HTMLElement;
     appContainer!: HTMLElement;
@@ -139,6 +145,28 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         this.wistiaIframeEmbedInit();
         $(document).ready(this.bootstrap.bind(this));
         this.updateCompletionStatus();
+        this.watchCmCompletionAreas();
+    }
+
+    /**
+     * Keep the course page indicators in place: render into completion areas that appear after
+     * setup (a course format loading content on demand) or that Moodle replaces (the course editor
+     * reloading a course module).
+     */
+    watchCmCompletionAreas(): void {
+        if (
+            !this.cmCompletions.length ||
+            typeof MutationObserver === 'undefined' ||
+            !document.body
+        ) {
+            return;
+        }
+        const check = debounce(() => {
+            if (findUnrenderedCmCompletions(this.cmCompletions).length > 0) {
+                this.updateCompletionStatus();
+            }
+        }, 300);
+        new MutationObserver(check).observe(document.body, { childList: true, subtree: true });
     }
 
     initAppElements(): void {
@@ -268,10 +296,14 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         return this.params.cmCompletions || [];
     }
 
-    /** Completion of the course page label the widget is loaded on, if it has Annoto completion. */
+    /**
+     * Completion of the course page label the widget is loaded on, if it has Annoto completion.
+     * Only a label reports progress from the course page; other types report inside the activity.
+     */
     get activeCmCompletion(): IActivityCompletionRequirements | undefined {
         const cmid = findCmId(this.activePlayer?.playerElement);
-        return cmid ? this.cmCompletions.find((req) => `${req.cmid}` === cmid) : undefined;
+        const req = cmid ? this.cmCompletions.find((item) => `${item.cmid}` === cmid) : undefined;
+        return req && isCourseLabelCompletion(req) ? req : undefined;
     }
 
     get hasCompletionTracking(): boolean {
@@ -1479,6 +1511,23 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     }
 
     async updateCompletionStatus(): Promise<void> {
+        if (this.isUpdatingCompletion) {
+            this.isCompletionUpdatePending = true;
+            return;
+        }
+        this.isUpdatingCompletion = true;
+        try {
+            await this.renderCompletionStatus();
+        } finally {
+            this.isUpdatingCompletion = false;
+        }
+        if (this.isCompletionUpdatePending) {
+            this.isCompletionUpdatePending = false;
+            await this.updateCompletionStatus();
+        }
+    }
+
+    async renderCompletionStatus(): Promise<void> {
         const { params, isActivityCompleted, myActivity, canCompleteActivity, cmCompletions } =
             this;
         const { activityCompletionEnabled, activityCompletionReq } = params;
@@ -1515,6 +1564,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                 const isCompleted = canCompleteActivity && isActivityCompletionMet(req, cmActivity);
                 // eslint-disable-next-line no-await-in-loop
                 await this.renderCompletionInfo(infoEl, req, cmActivity, isCompleted);
+                infoEl.setAttribute(CM_COMPLETION_RENDERED_ATTR, cmid);
             }
         }
     }
@@ -1586,8 +1636,8 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             <div class="automatic-completion-conditions" data-region="completionrequirements" role="list" aria-label="${escapeHtml(
                 requirementLabel
             )}">
-                <span class="badge badge-pill ${
-                    isActivityCompleted ? 'alert-success' : 'badge-light'
+                <span class="badge badge-pill rounded-pill ${
+                    isActivityCompleted ? 'alert-success' : 'badge-light bg-light text-dark'
                 }" role="listitem">
                     <span><img src="https://cdn.annoto.net/assets/latest/images/icon.svg" aria-hidden="true" style="width:16px;height:auto;"> ${escapeHtml(
                         text
