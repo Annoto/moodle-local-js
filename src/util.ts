@@ -41,14 +41,44 @@ export const delay = (ms: number): Promise<void> =>
 
 /**
  * Course module id of the activity an element is rendered in on a course page. Moodle renders
- * every course module there as `li.activity#module-<cmid>`; a label exists only there.
+ * every course module there as `li.activity#module-<cmid>`.
  */
 export const findCmId = (el?: Element | null): string | undefined =>
     el?.closest('li.activity[id^="module-"]')?.id.match(/^module-(\d+)$/)?.[1];
 
-/** The completion area Moodle renders inside a course module on the course page. */
+/**
+ * The completion area Moodle renders inside a course module on the course page. Moodle 3.11 to 5.x
+ * render it only when the course shows activity completion conditions (or for manual completion),
+ * so with that course setting off there is no area and no indicator, as for Moodle's own conditions.
+ */
 export const cmCompletionInfoEl = (cmid: string): HTMLElement | null =>
     document.querySelector(`li.activity#module-${cmid} [data-region="completion-info"]`);
+
+/** Marks a course module completion area that holds the Annoto indicator. */
+export const CM_COMPLETION_RENDERED_ATTR = 'data-annoto-completion';
+
+/**
+ * Course page completions whose area is on the page without the Annoto indicator: areas a course
+ * format loads later (Tiles) or that Moodle re-renders (the course editor reloads a course module).
+ */
+export const findUnrenderedCmCompletions = (
+    reqs: IActivityCompletionRequirements[]
+): IActivityCompletionRequirements[] =>
+    reqs.filter((req) => {
+        const el = cmCompletionInfoEl(`${req.cmid}`);
+        return !!el && !el.hasAttribute(CM_COMPLETION_RENDERED_ATTR);
+    });
+
+/**
+ * Whether progress on the course page counts for this course module: only a label, which has no
+ * page of its own. Every other type reports its progress inside the activity, and its course page
+ * indicator only reflects it. Plugin builds that do not send the modname are told by the label's
+ * `modtype_label` class.
+ */
+export const isCourseLabelCompletion = (req: IActivityCompletionRequirements): boolean =>
+    req.modname
+        ? req.modname === 'label'
+        : !!document.querySelector(`li.activity.modtype_label#module-${req.cmid}`);
 
 export const isActivityCompletionMet = (
     req: IActivityCompletionRequirements,

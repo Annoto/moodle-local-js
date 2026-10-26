@@ -18,8 +18,9 @@ export interface IMoodleJsParams {
     activityCompletionEnabled?: boolean;
     activityCompletionReq?: IActivityCompletionRequirements;
     /**
-     * Course page only: Annoto completion of the labels on it, which have no page of their own.
-     * Sent by plugin releases that support label completion; absent on older ones.
+     * Course page only: Annoto completion of every activity on it that the user can see, shown in
+     * each activity's own completion area. Sent by plugin releases that support it; absent on older
+     * ones.
      */
     cmCompletions?: IActivityCompletionRequirements[];
     userScope?: 'user' | 'super-mod';
@@ -171,6 +172,8 @@ export interface IActivityCompletionRequirements {
     timecreated: string;
     timemodified: string;
     user_data?: IActivityCompletionUserData;
+    /** Course page only (cmCompletions): the module type, e.g. `label`, `page`, `lti`. */
+    modname?: string;
 }
 
 export interface IActivityCompletionUserData {
