@@ -27,7 +27,8 @@
     "test:label-completion": "node test/label-completion.js",
     "prettier:fix": "prettier --write .",
     "test:layout": "node test/layout.js",
-    "test:grid": "node test/grid-popup.js"
+    "test:grid": "node test/grid-popup.js",
+    "test:widget-load": "node test/widget-load.js"
   },
   "dependencies": {
     "@annoto/widget-api": "^3.35.0"

@@ -45,6 +45,7 @@ import {
     parseMoodleVersion,
     parseUserActivity,
     pickPlayer,
+    widgetLoadedRequest,
 } from './util';
 import { AnnotoMoodleTiles } from './formats/tiles';
 import { AnnotoMoodleGridPopup } from './formats/grid-popup';
@@ -104,6 +105,8 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
     /** A completion status update is rendering; another was asked for meanwhile. */
     isUpdatingCompletion = false;
     isCompletionUpdatePending = false;
+    /** The plugin was told the widget loaded on this page (reportWidgetLoad). */
+    isWidgetLoadReported = false;
     trPromise?: Promise<IMoodleTr>;
     appEl!: HTMLElement;
     appContainer!: HTMLElement;
@@ -760,6 +763,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
         this.isloaded = true;
         this.annotoAPI = api;
         log.info('AnnotoMoodle: widget ready');
+        this.reportWidgetLoad();
         if (hasCompletionTracking && canCompleteActivity) {
             Annoto.on(`my_activity`, this.myActivityHandle);
         }
@@ -834,6 +838,39 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
 
     kalturaPluginReadyHandle(): void {
         log.info('AnnotoMoodle: Kaltura ready');
+        this.reportWidgetLoad();
+    }
+
+    /**
+     * Tell the Moodle plugin the widget was loaded on a video on this page, once per page, for its
+     * usage telemetry (courses and activities with Annoto, active users). Plugin releases before
+     * 5.6.0 have no such web service: the call then fails, which is ignored.
+     */
+    reportWidgetLoad(): void {
+        if (this.isWidgetLoadReported || !moodleAnnoto.Ajax) {
+            return;
+        }
+        const request = widgetLoadedRequest(this.params);
+        if (!request) {
+            return;
+        }
+        this.isWidgetLoadReported = true;
+        try {
+            moodleAnnoto.Ajax.call([
+                {
+                    ...request,
+                    done: (): void => {
+                        log.info('AnnotoMoodle: widget load reported');
+                    },
+                    fail: (err: unknown): void => {
+                        // Older plugin, telemetry off or a network error: never surface it.
+                        log.info('AnnotoMoodle: widget load not reported', err);
+                    },
+                },
+            ]);
+        } catch (err) {
+            log.info('AnnotoMoodle: widget load not reported', err);
+        }
     }
 
     setupKalturaKdpMap(kdpMap: KalturaKdpMapType): void {
@@ -1125,6 +1162,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                         log.info(
                             `AnnotoMoodle: applied group/config Kaltura V7 player: ${entry.id}`
                         );
+                        this.reportWidgetLoad();
                         if (userToken && typeof api.auth === 'function') {
                             log.info(`AnnotoMoodle: SSO auth Kaltura V7 player: ${entry.id}`);
                             return api.auth(userToken);

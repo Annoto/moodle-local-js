@@ -172,3 +172,26 @@ export const pickPlayer = <TType>(
     );
     return all.find(({ element }) => isRendered(element)) || all[0];
 };
+
+/** Web service of the Moodle plugin that records a widget load (plugin 5.6.0 and later). */
+export const WIDGET_LOADED_METHOD = 'local_annoto_widget_loaded';
+
+/**
+ * The Moodle AJAX request that tells the plugin the widget was loaded on a video on this page,
+ * for its usage telemetry. The activity is the page's cmid; on the course page it is 0 (the
+ * course). Undefined when the params name no course.
+ */
+export const widgetLoadedRequest = (params?: {
+    mediaGroupId?: string | number;
+    cmid?: string | number | null;
+}): { methodname: string; args: { courseid: number; cmid: number } } | undefined => {
+    const courseid = parseInt(`${params?.mediaGroupId ?? ''}`, 10);
+    if (!courseid || courseid < 1) {
+        return undefined;
+    }
+    const cmid = parseInt(`${params?.cmid ?? ''}`, 10);
+    return {
+        methodname: WIDGET_LOADED_METHOD,
+        args: { courseid, cmid: cmid > 0 ? cmid : 0 },
+    };
+};
