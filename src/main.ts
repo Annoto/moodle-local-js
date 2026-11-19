@@ -9,6 +9,7 @@ import {
     IMediaDetails,
     IMyActivity,
     IPlayerConfig,
+    IUx,
     IWidgetBackendOptions,
     PlayerType,
 } from '@annoto/widget-api';
@@ -31,17 +32,20 @@ import {
 } from './interfaces';
 import {
     CM_COMPLETION_RENDERED_ATTR,
-    cmCompletionInfoEl,
     debounce,
+    directionalUx,
+    ensureCmCompletionInfoEl,
     escapeHtml,
     findCmId,
     findPageScroller,
     findUnrenderedCmCompletions,
     generatePlayerId,
+    hideManualCompletionButtons,
     IPlayerCandidates,
     isActivityCompletionMet,
     isCourseLabelCompletion,
     isRendered,
+    pageDirection,
     parseMoodleVersion,
     parseUserActivity,
     pickPlayer,
@@ -226,6 +230,27 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
             config.locale = params.locale;
         }
         return config;
+    }
+
+    /**
+     * The widget ux with the widget on the side the page direction asks for, when the admin enabled
+     * positioning by direction; undefined when nothing changes. Keeps every other ux setting, so a
+     * Kaltura uiConf ux survives.
+     */
+    uxForDirection(ux?: IUx): IUx | undefined {
+        const { params } = this;
+        if (!params?.widgetPositionByDirection) {
+            return undefined;
+        }
+        return directionalUx(ux, pageDirection(params.pageDirection));
+    }
+
+    applyDirectionalPosition(config: Partial<IConfig>): void {
+        const ux = this.uxForDirection(config.ux);
+        if (ux) {
+            log.info(`AnnotoMoodle: widget position by page direction: ${ux.widget?.position}`);
+            config.ux = ux; // eslint-disable-line no-param-reassign
+        }
     }
 
     get moodleRelease(): IMoodleRelease {
@@ -727,6 +752,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                 ...this.configOverride,
                 widgets: [{ player: {} as IPlayerConfig }],
             };
+            this.applyDirectionalPosition(this.config);
             moodleAnnoto.require([this.params.bootstrapUrl], () => this.bootstrapDone(container));
         } else {
             log.info('AnnotoMoodle: bootstrap skipped - player not found');
@@ -1183,7 +1209,10 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                 );
                 return false;
             }
-            plugin.widgetConfig = plugin.mergeConfigUpdate(this.configOverride);
+            const ux = this.uxForDirection(plugin.widgetConfig?.ux);
+            plugin.widgetConfig = plugin.mergeConfigUpdate(
+                ux ? { ...this.configOverride, ux } : this.configOverride
+            );
             log.info(`AnnotoMoodle: seeded group/config into Kaltura V7 boot config: ${entry.id}`);
             return true;
         } catch (err) {
@@ -1212,7 +1241,9 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                 return undefined;
             }
             log.info(`AnnotoMoodle: setup hook was missed, recovered live config: ${entry.id}`);
-            return { ...live, ...this.configOverride } as IConfig;
+            const config = { ...live, ...this.configOverride } as IConfig;
+            this.applyDirectionalPosition(config);
+            return config;
         } catch (err) {
             log.warn(`AnnotoMoodle: Kaltura V7 config recovery failed: ${entry.id}`, err);
             return undefined;
@@ -1231,6 +1262,7 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
          * clientId, group, etc. DO NOT CHANGE THE PLAYER TYPE OR PLAYER ELEMENT CONFIG.
          */
         Object.assign(config, this.configOverride);
+        this.applyDirectionalPosition(config);
     }
 
     enrichMediaDetails(mediaParams: {
@@ -1554,11 +1586,15 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                     isActivityCompleted
                 );
             }
+            if (params.cmid) {
+                hideManualCompletionButtons(`${params.cmid}`);
+            }
         }
 
         for (const req of cmCompletions) {
             const cmid = `${req.cmid}`;
-            const infoEl = cmCompletionInfoEl(cmid);
+            const infoEl = ensureCmCompletionInfoEl(cmid);
+            hideManualCompletionButtons(cmid);
             if (infoEl) {
                 const cmActivity = this.cmActivityResponses[cmid] || parseUserActivity(req, log);
                 const isCompleted = canCompleteActivity && isActivityCompletionMet(req, cmActivity);

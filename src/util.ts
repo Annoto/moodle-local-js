@@ -1,4 +1,4 @@
-import { IMyActivity } from '@annoto/widget-api';
+import { IMyActivity, IUx, WidgetPositionType } from '@annoto/widget-api';
 import { IActivityCompletionRequirements, IMoodleRelease } from './interfaces';
 
 export const parseMoodleVersion = (release?: string): IMoodleRelease => {
@@ -56,6 +56,55 @@ export const cmCompletionInfoEl = (cmid: string): HTMLElement | null =>
 
 /** Marks a course module completion area that holds the Annoto indicator. */
 export const CM_COMPLETION_RENDERED_ATTR = 'data-annoto-completion';
+
+/**
+ * Moodle's manual completion ("Mark as done") buttons of a course module. Moodle 3.11 to 5.x render
+ * one for an activity with Annoto completion, since its completion templates treat any tracking
+ * that is not their own automatic one as manual; clicking it fails.
+ */
+export const manualCompletionButtons = (cmid: string): HTMLElement[] =>
+    Array.from(
+        document.querySelectorAll<HTMLElement>(
+            `[data-action="toggle-manual-completion"][data-cmid="${cmid}"]`
+        )
+    );
+
+/**
+ * Hide and disable the manual completion buttons of a course module, so that only the Annoto
+ * completion conditions show. Returns the number of buttons hidden.
+ */
+export const hideManualCompletionButtons = (cmid: string): number => {
+    const buttons = manualCompletionButtons(cmid);
+    buttons.forEach((button) => {
+        button.style.setProperty('display', 'none', 'important');
+        button.setAttribute('aria-hidden', 'true');
+        button.setAttribute('disabled', 'disabled');
+    });
+    return buttons.length;
+};
+
+/**
+ * The course page completion area of a course module, created next to its manual completion button
+ * when the course format renders the button outside of a completion area. Null when there is
+ * neither, as when the course does not show completion conditions.
+ */
+export const ensureCmCompletionInfoEl = (cmid: string): HTMLElement | null => {
+    const existing = cmCompletionInfoEl(cmid);
+    if (existing) {
+        return existing;
+    }
+    const button = manualCompletionButtons(cmid).find(
+        (el) => !!el.closest(`li.activity#module-${cmid}`)
+    );
+    if (!button?.parentElement) {
+        return null;
+    }
+    const infoEl = document.createElement('div');
+    infoEl.className = 'completion-info';
+    infoEl.setAttribute('data-region', 'completion-info');
+    button.parentElement.insertBefore(infoEl, button);
+    return infoEl;
+};
 
 /**
  * Course page completions whose area is on the page without the Annoto indicator: areas a course
@@ -172,3 +221,43 @@ export const pickPlayer = <TType>(
     );
     return all.find(({ element }) => isRendered(element)) || all[0];
 };
+
+/** Side of the player the widget opens on, before any `:top` / `:bottom` part. */
+const WIDGET_SIDE_RTL = 'left';
+
+/**
+ * Widget position for the page direction: on a right-to-left page the widget goes to the left side,
+ * away from the Moodle navigation drawer, keeping its vertical part (`right:top` becomes
+ * `left:top`). Left-to-right pages keep the position. Idempotent, so a config it already went
+ * through can safely go through it again.
+ */
+export const widgetPositionForDirection = (
+    position: WidgetPositionType | undefined,
+    direction?: string | null
+): WidgetPositionType | undefined => {
+    if (direction !== 'rtl') {
+        return position;
+    }
+    const vertical = position?.split(':')[1];
+    return (vertical ? `${WIDGET_SIDE_RTL}:${vertical}` : WIDGET_SIDE_RTL) as WidgetPositionType;
+};
+
+/**
+ * The widget ux with its position set for the page direction, keeping every other ux setting.
+ * Undefined when the position does not change.
+ */
+export const directionalUx = (ux: IUx | undefined, direction?: string | null): IUx | undefined => {
+    const position = ux?.widget?.position;
+    const next = widgetPositionForDirection(position, direction);
+    if (next === position) {
+        return undefined;
+    }
+    return { ...ux, widget: { ...ux?.widget, position: next } };
+};
+
+/**
+ * Text direction of the page: Moodle sets it on `<html dir>`; the plugin's `pageDirection` is the
+ * fallback for a page without it.
+ */
+export const pageDirection = (paramDirection?: string): string | undefined =>
+    document.documentElement.getAttribute('dir') || paramDirection;

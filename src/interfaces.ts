@@ -25,6 +25,21 @@ export interface IMoodleJsParams {
     cmCompletions?: IActivityCompletionRequirements[];
     userScope?: 'user' | 'super-mod';
     userIsEnrolled?: boolean;
+    /**
+     * The course category, sent by plugin releases that support it (5.7.0+); absent on older ones.
+     * `mediaGroupCategoryPath` is the category names from the top category down, ` / ` separated.
+     */
+    mediaGroupCategoryId?: number;
+    mediaGroupCategory?: string;
+    mediaGroupCategoryIdNumber?: string;
+    mediaGroupCategoryPath?: string;
+    /** Text direction of the course language (plugin 5.7.0+). */
+    pageDirection?: 'ltr' | 'rtl';
+    /**
+     * The admin enabled positioning the widget by page direction: on right-to-left pages it opens
+     * on the left (plugin 5.7.0+; absent, so off, on older releases).
+     */
+    widgetPositionByDirection?: boolean;
 }
 
 export interface IMoodleAnnoto {
