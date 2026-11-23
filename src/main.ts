@@ -31,13 +31,14 @@ import {
 } from './interfaces';
 import {
     CM_COMPLETION_RENDERED_ATTR,
-    cmCompletionInfoEl,
     debounce,
+    ensureCmCompletionInfoEl,
     escapeHtml,
     findCmId,
     findPageScroller,
     findUnrenderedCmCompletions,
     generatePlayerId,
+    hideManualCompletionButtons,
     IPlayerCandidates,
     isActivityCompletionMet,
     isCourseLabelCompletion,
@@ -1554,11 +1555,15 @@ class AnnotoMoodle implements IAnnotoMoodleMain {
                     isActivityCompleted
                 );
             }
+            if (params.cmid) {
+                hideManualCompletionButtons(`${params.cmid}`);
+            }
         }
 
         for (const req of cmCompletions) {
             const cmid = `${req.cmid}`;
-            const infoEl = cmCompletionInfoEl(cmid);
+            const infoEl = ensureCmCompletionInfoEl(cmid);
+            hideManualCompletionButtons(cmid);
             if (infoEl) {
                 const cmActivity = this.cmActivityResponses[cmid] || parseUserActivity(req, log);
                 const isCompleted = canCompleteActivity && isActivityCompletionMet(req, cmActivity);

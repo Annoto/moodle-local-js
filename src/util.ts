@@ -58,6 +58,55 @@ export const cmCompletionInfoEl = (cmid: string): HTMLElement | null =>
 export const CM_COMPLETION_RENDERED_ATTR = 'data-annoto-completion';
 
 /**
+ * Moodle's manual completion ("Mark as done") buttons of a course module. Moodle 3.11 to 5.x render
+ * one for an activity with Annoto completion, since its completion templates treat any tracking
+ * that is not their own automatic one as manual; clicking it fails.
+ */
+export const manualCompletionButtons = (cmid: string): HTMLElement[] =>
+    Array.from(
+        document.querySelectorAll<HTMLElement>(
+            `[data-action="toggle-manual-completion"][data-cmid="${cmid}"]`
+        )
+    );
+
+/**
+ * Hide and disable the manual completion buttons of a course module, so that only the Annoto
+ * completion conditions show. Returns the number of buttons hidden.
+ */
+export const hideManualCompletionButtons = (cmid: string): number => {
+    const buttons = manualCompletionButtons(cmid);
+    buttons.forEach((button) => {
+        button.style.setProperty('display', 'none', 'important');
+        button.setAttribute('aria-hidden', 'true');
+        button.setAttribute('disabled', 'disabled');
+    });
+    return buttons.length;
+};
+
+/**
+ * The course page completion area of a course module, created next to its manual completion button
+ * when the course format renders the button outside of a completion area. Null when there is
+ * neither, as when the course does not show completion conditions.
+ */
+export const ensureCmCompletionInfoEl = (cmid: string): HTMLElement | null => {
+    const existing = cmCompletionInfoEl(cmid);
+    if (existing) {
+        return existing;
+    }
+    const button = manualCompletionButtons(cmid).find(
+        (el) => !!el.closest(`li.activity#module-${cmid}`)
+    );
+    if (!button?.parentElement) {
+        return null;
+    }
+    const infoEl = document.createElement('div');
+    infoEl.className = 'completion-info';
+    infoEl.setAttribute('data-region', 'completion-info');
+    button.parentElement.insertBefore(infoEl, button);
+    return infoEl;
+};
+
+/**
  * Course page completions whose area is on the page without the Annoto indicator: areas a course
  * format loads later (Tiles) or that Moodle re-renders (the course editor reloads a course module).
  */

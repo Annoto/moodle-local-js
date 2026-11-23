@@ -25,6 +25,14 @@ export interface IMoodleJsParams {
     cmCompletions?: IActivityCompletionRequirements[];
     userScope?: 'user' | 'super-mod';
     userIsEnrolled?: boolean;
+    /**
+     * The course category, sent by plugin releases that support it (5.7.0+); absent on older ones.
+     * `mediaGroupCategoryPath` is the category names from the top category down, ` / ` separated.
+     */
+    mediaGroupCategoryId?: number;
+    mediaGroupCategory?: string;
+    mediaGroupCategoryIdNumber?: string;
+    mediaGroupCategoryPath?: string;
 }
 
 export interface IMoodleAnnoto {
