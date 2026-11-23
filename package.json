@@ -28,7 +28,6 @@
     "prettier:fix": "prettier --write .",
     "test:layout": "node test/layout.js",
     "test:grid": "node test/grid-popup.js",
-    "test:direction": "node test/direction.js",
     "test:manual-completion": "node test/manual-completion.js"
   },
   "dependencies": {

@@ -33,13 +33,6 @@ export interface IMoodleJsParams {
     mediaGroupCategory?: string;
     mediaGroupCategoryIdNumber?: string;
     mediaGroupCategoryPath?: string;
-    /** Text direction of the course language (plugin 5.7.0+). */
-    pageDirection?: 'ltr' | 'rtl';
-    /**
-     * The admin enabled positioning the widget by page direction: on right-to-left pages it opens
-     * on the left (plugin 5.7.0+; absent, so off, on older releases).
-     */
-    widgetPositionByDirection?: boolean;
 }
 
 export interface IMoodleAnnoto {

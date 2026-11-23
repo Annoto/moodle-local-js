@@ -1,4 +1,4 @@
-import { IMyActivity, IUx, WidgetPositionType } from '@annoto/widget-api';
+import { IMyActivity } from '@annoto/widget-api';
 import { IActivityCompletionRequirements, IMoodleRelease } from './interfaces';
 
 export const parseMoodleVersion = (release?: string): IMoodleRelease => {
@@ -221,43 +221,3 @@ export const pickPlayer = <TType>(
     );
     return all.find(({ element }) => isRendered(element)) || all[0];
 };
-
-/** Side of the player the widget opens on, before any `:top` / `:bottom` part. */
-const WIDGET_SIDE_RTL = 'left';
-
-/**
- * Widget position for the page direction: on a right-to-left page the widget goes to the left side,
- * away from the Moodle navigation drawer, keeping its vertical part (`right:top` becomes
- * `left:top`). Left-to-right pages keep the position. Idempotent, so a config it already went
- * through can safely go through it again.
- */
-export const widgetPositionForDirection = (
-    position: WidgetPositionType | undefined,
-    direction?: string | null
-): WidgetPositionType | undefined => {
-    if (direction !== 'rtl') {
-        return position;
-    }
-    const vertical = position?.split(':')[1];
-    return (vertical ? `${WIDGET_SIDE_RTL}:${vertical}` : WIDGET_SIDE_RTL) as WidgetPositionType;
-};
-
-/**
- * The widget ux with its position set for the page direction, keeping every other ux setting.
- * Undefined when the position does not change.
- */
-export const directionalUx = (ux: IUx | undefined, direction?: string | null): IUx | undefined => {
-    const position = ux?.widget?.position;
-    const next = widgetPositionForDirection(position, direction);
-    if (next === position) {
-        return undefined;
-    }
-    return { ...ux, widget: { ...ux?.widget, position: next } };
-};
-
-/**
- * Text direction of the page: Moodle sets it on `<html dir>`; the plugin's `pageDirection` is the
- * fallback for a page without it.
- */
-export const pageDirection = (paramDirection?: string): string | undefined =>
-    document.documentElement.getAttribute('dir') || paramDirection;
